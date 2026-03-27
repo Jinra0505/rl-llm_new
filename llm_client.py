@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Formal-run LLM client (real-only, no automatic mock fallback)."""
+"""Formal-run LLM client (strict real-only mode)."""
 
 import json
 import os
@@ -10,12 +10,7 @@ from typing import Any
 
 
 class LLMClient:
-    """DeepSeek-compatible OpenAI client for formal runs.
-
-    Notes:
-    - Formal path is strictly real-only.
-    - `_mock_response` is kept as test-only helper and is unreachable from formal CLI flows.
-    """
+    """DeepSeek-compatible OpenAI client for formal runs."""
 
     def __init__(
         self,
@@ -66,7 +61,6 @@ class LLMClient:
 
     @property
     def using_mock(self) -> bool:
-        # Kept for backward compatibility with existing code paths; formal mode is always real.
         return False
 
     def effective_mode(self) -> str:
@@ -99,7 +93,7 @@ class LLMClient:
             self.last_error = error
 
     def chat(self, messages: list[dict[str, str]], response_kind: str = "chat", sample_idx: int = 0) -> str:
-        _ = sample_idx  # test-only placeholder; formal path never uses mock sampling.
+        _ = sample_idx
         return self._real_chat(messages, response_kind=response_kind)
 
     def chat_json(self, messages: list[dict[str, str]], response_kind: str = "chat", sample_idx: int = 0) -> dict[str, Any]:
@@ -134,15 +128,15 @@ class LLMClient:
         return base if base.endswith("/v1") else f"{base}/v1"
 
     def _select_model(self, response_kind: str) -> str:
-        if response_kind in {"router", "feedback"}:
-            return self.reasoner_model or self.chat_model
         return self.chat_model
 
     def _max_tokens_for_kind(self, response_kind: str) -> int:
-        if response_kind in {"router", "planning", "feedback"}:
+        if response_kind in {"router", "feedback"}:
             return int(min(self.max_tokens, 600))
+        if response_kind == "planning":
+            return int(min(self.max_tokens, 1000))
         if response_kind == "codegen":
-            return int(min(self.max_tokens, 800))
+            return int(min(self.max_tokens, 1400))
         return int(self.max_tokens)
 
     def _temperature_for_kind(self, response_kind: str) -> float:
@@ -177,55 +171,44 @@ class LLMClient:
         except Exception as exc:  # noqa: BLE001
             raise RuntimeError(f"LLM preflight check failed. {exc}") from exc
 
-    # test-only helper
-    def _mock_response(self, response_kind: str, sample_idx: int) -> str:
-        _ = response_kind
-        _ = sample_idx
-        return "{}"
-
     def _real_chat(self, messages: list[dict[str, str]], response_kind: str = "chat") -> str:
         from openai import OpenAI
 
         client = OpenAI(api_key=self.api_key, base_url=self._normalize_base_url(), timeout=self.timeout_seconds, max_retries=0)
         preferred_model = self._select_model(response_kind=response_kind)
-        model_candidates = [preferred_model]
-        if self.chat_model and self.chat_model != preferred_model:
-            model_candidates.append(self.chat_model)
-        if self.reasoner_model and self.reasoner_model not in model_candidates:
-            model_candidates.append(self.reasoner_model)
 
         last_exc: Exception | None = None
-        for model in model_candidates:
-            for attempt in range(self.max_retries + 1):
-                t0 = time.time()
-                try:
-                    resp = client.chat.completions.create(
-                        model=model,
-                        messages=messages,
-                        temperature=self._temperature_for_kind(response_kind),
-                        max_tokens=self._max_tokens_for_kind(response_kind),
-                    )
-                    content = resp.choices[0].message.content or ""
-                    if not content.strip():
-                        raise RuntimeError(f"Empty content from LLM for response_kind={response_kind}, model={model}")
-                    self._record_call(
-                        response_kind=response_kind,
-                        model=model,
-                        success=True,
-                        latency_sec=time.time() - t0,
-                        error="",
-                    )
-                    return content
-                except Exception as exc:  # noqa: BLE001
-                    last_exc = exc
-                    err_msg = str(exc)
-                    self._record_call(
-                        response_kind=response_kind,
-                        model=model,
-                        success=False,
-                        latency_sec=time.time() - t0,
-                        error=err_msg,
-                    )
-                    if attempt < self.max_retries:
-                        time.sleep(1.2 * (attempt + 1))
+        model = preferred_model
+        for attempt in range(self.max_retries + 1):
+            t0 = time.time()
+            try:
+                resp = client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=self._temperature_for_kind(response_kind),
+                    max_tokens=self._max_tokens_for_kind(response_kind),
+                )
+                content = resp.choices[0].message.content or ""
+                if not content.strip():
+                    raise RuntimeError(f"Empty content from LLM for response_kind={response_kind}, model={model}")
+                self._record_call(
+                    response_kind=response_kind,
+                    model=model,
+                    success=True,
+                    latency_sec=time.time() - t0,
+                    error="",
+                )
+                return content
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                err_msg = str(exc)
+                self._record_call(
+                    response_kind=response_kind,
+                    model=model,
+                    success=False,
+                    latency_sec=time.time() - t0,
+                    error=err_msg,
+                )
+                if attempt < self.max_retries:
+                    time.sleep(1.2 * (attempt + 1))
         raise RuntimeError(f"DeepSeek API call failed after retries ({response_kind}, model={preferred_model}): {last_exc}")

@@ -30,9 +30,9 @@ class ProjectRecoveryEnv(gym.Env):
       22    : stage_indicator (0 early, 0.5 middle, 1 late)
       23    : constraint_flag
 
-    Actions (Discrete 14):
+    Actions (Discrete 15):
       0-2 road_A/B/C, 3-5 power_A/B/C, 6-8 comm_A/B/C,
-      9-11 mes_to_A/B/C, 12 feeder_reconfigure, 13 coordinated_balanced
+      9-11 mes_to_A/B/C, 12 feeder_reconfigure, 13 coordinated_balanced, 14 wait_hold
     """
 
     metadata = {"render_modes": []}
@@ -49,7 +49,7 @@ class ProjectRecoveryEnv(gym.Env):
         self.rng = np.random.default_rng(seed)
         self.severity = severity
 
-        self.action_space = spaces.Discrete(14)
+        self.action_space = spaces.Discrete(15)
         self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(24,), dtype=np.float32)
 
         self.w = reward_weights or {
@@ -104,6 +104,8 @@ class ProjectRecoveryEnv(gym.Env):
             return "mes"
         if action == 12:
             return "feeder"
+        if action == 14:
+            return "wait"
         return "coordinated"
 
     def reset(self, *, seed: int | None = None, options: dict[str, Any] | None = None):
@@ -224,7 +226,7 @@ class ProjectRecoveryEnv(gym.Env):
             P[donor] -= 0.01 * transfer
             material -= 0.025
 
-        else:  # 13 coordinated balanced restoration
+        elif action == 13:  # coordinated balanced restoration
             # high C0 and recovered communication improve balanced coordination.
             coord = (0.55 + 0.30 * C0 + 0.15 * float(np.mean(C)))
             if stage_name == "middle":
@@ -241,6 +243,14 @@ class ProjectRecoveryEnv(gym.Env):
             C0 += 0.01 * coord
             R0 += 0.008 * coord
             material -= 0.04
+        else:  # 14 wait_hold (resource preservation / regroup)
+            # Hold action: preserve resources and recover teams for late-stage finishing.
+            crew_p += 0.020
+            crew_c += 0.020
+            crew_r += 0.020
+            switch_cap += 0.015
+            material += 0.020
+            mes_soc += 0.015
 
         # lightweight resource dynamics
         if 3 <= action <= 5:
@@ -331,7 +341,7 @@ class ProjectRecoveryEnv(gym.Env):
         progress_now = self._progress(s)
         progress_delta = progress_now - progress_prev
 
-        terminated = bool(np.mean(s[9:12]) >= 0.90 and progress_now >= 0.88)
+        terminated = bool(np.mean(s[9:12]) >= 0.82 and progress_now >= 0.78)
         truncated = self.step_count >= self.max_steps
 
         info = self._build_info(progress_delta=progress_delta, invalid_action=invalid_action, invalid_reason=invalid_reason, mes_used=mes_used)
