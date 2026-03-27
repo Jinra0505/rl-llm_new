@@ -776,7 +776,7 @@ def main() -> None:
                     dqn_cfg=cfg.get("training", {}),
                     severity=str(cfg.get("scenario", {}).get("severity", "moderate")),
                 )
-                metrics["selected_task"] = route.get("final_task_mode", route.get("task_mode"))
+                metrics["selected_task"] = route.get("task_mode")
                 metrics["llm_effective_mode"] = client.effective_mode()
                 metrics["router_mode"] = args.router_mode
                 metrics["wait_hold_usage_eval"] = float(metrics.get("wait_hold_usage_eval", metrics.get("wait_hold_usage", 0.0)))
@@ -818,7 +818,7 @@ def main() -> None:
 
         summary = {
             "round": round_idx + 1,
-            "selected_task": route.get("final_task_mode", route.get("task_mode")),
+            "selected_task": route.get("task_mode"),
             "route": route,
             "planning": planning_json,
             "planning_repaired_from_raw": planning_repaired,
@@ -838,10 +838,6 @@ def main() -> None:
             "router_source": "llm",
             "planning_source": "llm",
             "feedback_source": "llm",
-            "llm_task_mode_raw": route.get("llm_task_mode_raw", route.get("task_mode")),
-            "final_task_mode": route.get("final_task_mode", route.get("task_mode")),
-            "override_applied": bool(route.get("override_applied", False)),
-            "override_reason": str(route.get("override_reason", "")),
             "task_switched_vs_prev_round": bool(route.get("task_switched_vs_prev_round", False)),
             "selection_diagnostics": selection_diagnostics,
             "llm_feedback": feedback_json,

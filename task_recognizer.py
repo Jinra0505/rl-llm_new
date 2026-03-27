@@ -104,8 +104,4 @@ class ScenarioTaskRecognizer:
             raise ValueError(f"Recognizer returned invalid task_mode: {route['task_mode']}")
         route["source"] = "llm"
         route["model"] = client.chat_model
-        route["llm_task_mode_raw"] = route["task_mode"]
-        route["final_task_mode"] = route["task_mode"]
-        route["override_applied"] = False
-        route["override_reason"] = ""
         return route
