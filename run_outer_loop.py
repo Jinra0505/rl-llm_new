@@ -21,6 +21,11 @@ from router import route_llm, summarize_trajectory
 from train_rl import run_training
 
 LOGGER = logging.getLogger(__name__)
+TASK_MODE_ALLOWED = {
+    "critical_load_priority",
+    "restoration_capability_priority",
+    "global_efficiency_priority",
+}
 ALLOWED_IMPORTS = {"numpy", "math", "__future__"}
 FORBIDDEN_CALLS = {"eval", "exec", "compile", "open", "__import__", "input"}
 
@@ -151,7 +156,11 @@ def _semantic_validate_candidate(code: str, max_revised_dim: int | None = None) 
         except Exception as exc:  # noqa: BLE001
             errors.append(f"Semantic validation: revise_state failed on sample {idx}: {exc}")
             continue
-        arr = np.asarray(rs, dtype=float)
+        try:
+            arr = np.asarray(rs, dtype=float)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"Semantic validation: revise_state output is not numeric array-like on sample {idx}: {exc}")
+            continue
         if arr.ndim != 1:
             errors.append(f"Semantic validation: revise_state output must be 1-D, got ndim={arr.ndim} on sample {idx}")
             continue
@@ -266,11 +275,13 @@ def _action_category(action: int) -> str:
         return "mes"
     if action == 12:
         return "feeder"
+    if action == 14:
+        return "wait"
     return "coordinated"
 
 
 def _aggregate_action_category_distribution(action_usage: dict[str, Any]) -> dict[str, float]:
-    cats = {"road": 0.0, "power": 0.0, "comm": 0.0, "mes": 0.0, "feeder": 0.0, "coordinated": 0.0}
+    cats = {"road": 0.0, "power": 0.0, "comm": 0.0, "mes": 0.0, "feeder": 0.0, "coordinated": 0.0, "wait": 0.0}
     for action_str, val in action_usage.items():
         try:
             action = int(action_str)
@@ -359,6 +370,7 @@ def collect_routing_context(
             "backbone_comm_ratio": float(previous_metrics.get("backbone_comm_ratio", previous_metrics.get("communication_recovery_ratio", 0.0))),
             "backbone_power_ratio": float(previous_metrics.get("backbone_power_ratio", previous_metrics.get("power_recovery_ratio", 0.0))),
             "backbone_road_ratio": float(previous_metrics.get("backbone_road_ratio", previous_metrics.get("road_recovery_ratio", 0.0))),
+            "material_stock": float(previous_metrics.get("material_stock_end_mean", previous_metrics.get("material_stock_mean_end", 1.0))),
             "weakest_zone": str(previous_metrics.get("weakest_zone", "A")),
             "weakest_layer": str(previous_metrics.get("weakest_layer", "0")),
             "constraint_violation_count": int(previous_metrics.get("constraint_violation_count", 0)),
@@ -391,6 +403,7 @@ def collect_routing_context(
             "backbone_comm_ratio": float(last_info.get("backbone_comm_ratio", last_info.get("communication_recovery_ratio", 0.0))),
             "backbone_power_ratio": float(last_info.get("backbone_power_ratio", last_info.get("power_recovery_ratio", 0.0))),
             "backbone_road_ratio": float(last_info.get("backbone_road_ratio", last_info.get("road_recovery_ratio", 0.0))),
+            "material_stock": float(last_info.get("material_stock", 1.0)),
             "weakest_zone": str(last_info.get("weakest_zone", "A")),
             "weakest_layer": str(last_info.get("weakest_layer", "0")),
             "constraint_violation_count": int(last_info.get("constraint_violation_count", 0)),
@@ -441,7 +454,7 @@ def build_feedback(best_candidate: dict[str, Any], score_metric: str) -> dict[st
 
 def build_planning_payload(route: dict[str, Any], routing_context: dict[str, Any], previous_feedback: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
-        "task_mode": str(route.get("task_mode", "coordinated_restoration")),
+        "task_mode": str(route.get("task_mode", "global_efficiency_priority")),
         "stage": str(route.get("stage", "middle")),
         "route_reason": str(route.get("reason", "")),
         "routing_context": routing_context,
@@ -499,6 +512,8 @@ def select_best_candidate(round_candidates: list[dict[str, Any]], reference_metr
             comm = _safe_float(metrics.get("communication_recovery_ratio", 0.0))
             road = _safe_float(metrics.get("road_recovery_ratio", 0.0))
             violation = _safe_float(metrics.get("constraint_violation_rate_eval", 1.0), default=1.0)
+            material_end = _safe_float(metrics.get("material_stock_end_mean", metrics.get("material_stock_mean_end", 0.0)))
+            invalid_rate = _safe_float(metrics.get("invalid_action_rate_eval", metrics.get("invalid_action_rate", 1.0)))
             rep = metrics.get("representative_eval_summary", {}) if isinstance(metrics.get("representative_eval_summary"), dict) else {}
             final_progress_delta = _safe_float(rep.get("final_progress_delta", 0.0))
             final_stage = str(rep.get("final_stage", "unknown"))
@@ -522,6 +537,10 @@ def select_best_candidate(round_candidates: list[dict[str, Any]], reference_metr
                 avg_recovery = (power + comm + road) / 3.0
                 if violation < ref_violation and avg_recovery < (ref_avg_recovery - 0.08):
                     reasons.append("violation_improved_but_recovery_collapsed")
+            if material_end < 0.03 and (invalid_rate > 0.45 or progress < 0.001):
+                reasons.append("resource_sustainability_collapse")
+            if final_stage != "late" and progress < 0.0009 and critical < 0.55:
+                reasons.append("not_finish_oriented_under_zero_success")
 
         if reasons:
             rejected_ids.append(cid)
@@ -532,12 +551,26 @@ def select_best_candidate(round_candidates: list[dict[str, Any]], reference_metr
     pool = accepted if accepted else [c for c in round_candidates if isinstance(c.get("metrics"), dict)]
     if not pool:
         raise RuntimeError("No candidate with metrics is available for selection.")
-    best_metrics = select_best([c["metrics"] for c in pool], "selection_score", higher_is_better)
-    best_candidate = next(c for c in pool if c["metrics"] is best_metrics)
+    all_zero_success = all(_safe_float(c.get("metrics", {}).get("success_rate", 0.0)) <= 0.0 for c in pool)
+    if all_zero_success:
+        def zero_success_rank_key(c: dict[str, Any]) -> tuple[float, float, float, float]:
+            m = c.get("metrics", {})
+            stage_close = _safe_float(m.get("mean_stage_indicator_eval", 0.0))
+            critical = _safe_float(m.get("critical_load_recovery_ratio", 0.0))
+            prog = _safe_float(m.get("mean_progress_delta_eval", m.get("mean_progress_delta", 0.0)))
+            material = _safe_float(m.get("material_stock_end_mean", m.get("material_stock_mean_end", 0.0)))
+            violation = _safe_float(m.get("constraint_violation_rate_eval", 1.0), default=1.0)
+            return (stage_close, critical, prog, material, -violation)
+        best_candidate = sorted(pool, key=zero_success_rank_key, reverse=True)[0]
+        best_metrics = best_candidate["metrics"]
+    else:
+        best_metrics = select_best([c["metrics"] for c in pool], "selection_score", higher_is_better)
+        best_candidate = next(c for c in pool if c["metrics"] is best_metrics)
     return {
         "best_candidate": best_candidate,
         "selection_diagnostics": {
             "selection_policy": "gate_then_score",
+            "zero_success_policy_applied": all_zero_success,
             "accepted_ids": [str(c.get("candidate_id", "")) for c in accepted],
             "rejected_ids": rejected_ids,
             "rejection_reasons": rejection_reasons,
@@ -630,12 +663,44 @@ def main() -> None:
         prev_metrics = previous_best.get("metrics", {}) if previous_best else {}
         routing_context = collect_routing_context(args.env, prev_metrics, cfg, previous_best_candidate=previous_best)
 
-        if round_idx == 0 or args.reroute_each_round:
-            try:
-                route = route_llm(client, SYSTEM_PROMPT, ROUTER_PROMPT, routing_context)
-            except Exception as exc:  # noqa: BLE001
-                _write_failure_artifacts(run_dir, "router", exc, client)
-                raise
+        try:
+            route = route_llm(client, SYSTEM_PROMPT, ROUTER_PROMPT, routing_context)
+        except Exception as exc:  # noqa: BLE001
+            _write_failure_artifacts(run_dir, "router", exc, client)
+            raise
+        if route["task_mode"] not in TASK_MODE_ALLOWED:
+            route["task_mode"] = "global_efficiency_priority"
+            route["final_task_mode"] = route["task_mode"]
+            route["override_applied"] = True
+            route["override_reason"] = "task_mode normalized to simplified 3-task formal set"
+        env_s = routing_context.get("env_summary", {})
+        traj_s = routing_context.get("trajectory_summary", {})
+        mat = float(env_s.get("material_stock", prev_metrics.get("material_stock_end_mean", 1.0) if previous_best else 1.0))
+        comm = float(env_s.get("communication_recovery_ratio", 0.0))
+        road = float(env_s.get("road_recovery_ratio", 0.0))
+        shortfall = float(env_s.get("critical_load_shortfall", 1.0))
+        violation = float(traj_s.get("constraint_violation_rate", 0.0))
+        mean_prog = float(traj_s.get("mean_progress_delta", 0.0))
+        if round_idx > 0:
+            layer_gap = max(comm, float(env_s.get("power_recovery_ratio", 0.0)), road) - min(
+                comm, float(env_s.get("power_recovery_ratio", 0.0)), road
+            )
+            avg_recovery = (comm + float(env_s.get("power_recovery_ratio", 0.0)) + road) / 3.0
+            if mat < 0.16 or violation > 0.18 or min(comm, road) < 0.55:
+                route["final_task_mode"] = "restoration_capability_priority"
+                route["task_mode"] = "restoration_capability_priority"
+                route["override_applied"] = True
+                route["override_reason"] = "Round reroute: resource/road/comm constraints dominate."
+            elif avg_recovery > 0.52 and layer_gap < 0.18 and shortfall < 0.50:
+                route["final_task_mode"] = "global_efficiency_priority"
+                route["task_mode"] = "global_efficiency_priority"
+                route["override_applied"] = True
+                route["override_reason"] = "Round reroute: recovery is broader and incomplete."
+            elif shortfall > 0.45 and float(env_s.get("power_recovery_ratio", 0.0)) < 0.58:
+                route["final_task_mode"] = "critical_load_priority"
+                route["task_mode"] = "critical_load_priority"
+                route["override_applied"] = True
+                route["override_reason"] = "Round reroute: critical shortfall remains dominant bottleneck."
 
         round_dir = run_dir / f"round_{round_idx+1}"
         round_dir.mkdir(parents=True, exist_ok=True)
@@ -647,14 +712,13 @@ def main() -> None:
             previous_feedback=(history[-1].get("llm_feedback", {}) if history else None),
         )
         try:
-            planning_raw = client.chat(
+            planning_json = client.chat_json(
                 [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": PLANNING_PROMPT + "\n\n" + json.dumps(planning_payload, indent=2)}],
                 response_kind="planning",
                 sample_idx=round_idx,
             )
-            planning_json, planning_repaired = parse_json_with_repair(planning_raw)
-            if not planning_json:
-                raise RuntimeError("Planning stage JSON parse failed under real LLM run.")
+            planning_raw = json.dumps(planning_json, ensure_ascii=False, indent=2)
+            planning_repaired = False
         except Exception as exc:  # noqa: BLE001
             _write_failure_artifacts(run_dir, "planning", exc, client)
             raise
@@ -676,20 +740,29 @@ def main() -> None:
                 observation_schema=str(cfg["env"]),
                 planning_json=json.dumps(planning_json, indent=2, ensure_ascii=False),
             )
-            prompt += "\n\nReturn compact JSON and keep generated code concise (<= 80 lines)."
+            prompt += "\n\nReturn compact JSON and keep generated code concise (<= 45 lines)."
+            prompt += (
+                "\nCode must include explicit finish-oriented shaping: reward entering late stage, reward completion, "
+                "penalize prolonged middle-stage tiny progress, and penalize resource collapse."
+            )
             if history:
                 prompt += "\n\nLatest feedback:\n" + json.dumps(history[-1].get("feedback_payload", {}), indent=2)
             raw = "{}"
             parsed: dict[str, Any] = {}
             repaired = True
             report: dict[str, Any] = {"valid": False, "errors": ["not attempted"], "normalized_payload": {}}
-            for attempt in range(2):
+            for attempt in range(4):
                 attempt_prompt = prompt
                 if attempt > 0:
                     attempt_prompt += (
                         "\n\nPrevious output was invalid. Respond with ONLY one JSON object with keys: "
                         "file_name, rationale, code, expected_behavior."
                     )
+                    attempt_prompt += (
+                        "\nThe 'code' field must be a valid Python source string with escaped newlines, "
+                        "and must parse successfully."
+                    )
+                    attempt_prompt += "\nPrevious validation errors: " + json.dumps(report.get("errors", []), ensure_ascii=False)
                 try:
                     raw = client.chat(
                         [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": attempt_prompt}],
@@ -697,41 +770,17 @@ def main() -> None:
                         sample_idx=sample_idx + round_idx * 10 + attempt,
                     )
                 except Exception as exc:  # noqa: BLE001
-                    if attempt < 1:
+                    if attempt < 3:
                         continue
-                    raw = ""
-                    parsed = {
-                        "file_name": f"fallback_{route['task_mode']}_{route['stage']}.py",
-                        "rationale": f"Codegen call failed under real LLM ({exc}); fallback to baseline_noop-compatible candidate.",
-                        "code": Path("baseline_noop.py").read_text(encoding="utf-8"),
-                        "expected_behavior": "Safety fallback candidate when real LLM codegen call fails.",
-                    }
-                    repaired = True
-                    report = validate_candidate_payload(
-                        parsed,
-                        max_revised_dim=(
-                            int(cfg.get("state_representation", {}).get("max_revised_dim"))
-                            if cfg.get("state_representation", {}).get("max_revised_dim") is not None
-                            else None
-                        ),
-                    )
-                    report["repaired_from_raw"] = True
-                    break
+                    raise RuntimeError(f"Codegen call failed for {cid} under formal real LLM mode: {exc}") from exc
                 parsed, repaired = parse_json_with_repair(raw)
                 if not parsed:
                     recovered = recover_candidate_payload_from_raw(raw, task_mode=route["task_mode"], stage=route["stage"])
                     if recovered:
                         parsed = recovered
                         repaired = True
-                if not parsed and attempt == 1:
-                    baseline_code = Path("baseline_noop.py").read_text(encoding="utf-8")
-                    parsed = {
-                        "file_name": f"fallback_{route['task_mode']}_{route['stage']}.py",
-                        "rationale": "Codegen JSON parse failed; fallback to baseline_noop-compatible candidate for continuity.",
-                        "code": baseline_code,
-                        "expected_behavior": "Safety fallback candidate when real LLM codegen payload is malformed.",
-                    }
-                    repaired = True
+                if not parsed and attempt == 3:
+                    raise RuntimeError(f"Codegen JSON parse failed for {cid} under formal real LLM mode.")
                 report = validate_candidate_payload(
                     parsed,
                     max_revised_dim=(
@@ -745,25 +794,9 @@ def main() -> None:
                     break
 
             if not report["valid"]:
-                fallback_payload = {
-                    "file_name": f"fallback_{route['task_mode']}_{route['stage']}.py",
-                    "rationale": "Fallback to baseline_noop-compatible candidate after invalid codegen output.",
-                    "code": Path("baseline_noop.py").read_text(encoding="utf-8"),
-                    "expected_behavior": "Guaranteed-valid fallback candidate to keep formal run trainable.",
-                }
-                fallback_report = validate_candidate_payload(
-                    fallback_payload,
-                    max_revised_dim=(
-                        int(cfg.get("state_representation", {}).get("max_revised_dim"))
-                        if cfg.get("state_representation", {}).get("max_revised_dim") is not None
-                        else None
-                    ),
+                raise RuntimeError(
+                    f"Candidate {cid} failed validation in formal real LLM mode; errors={report.get('errors', [])}"
                 )
-                fallback_report["repaired_from_raw"] = True
-                if fallback_report["valid"]:
-                    parsed = fallback_payload
-                    report = fallback_report
-                    repaired = True
 
             (cdir / "prompt.txt").write_text(prompt, encoding="utf-8")
             (cdir / "raw_response.txt").write_text(raw, encoding="utf-8")
@@ -793,6 +826,9 @@ def main() -> None:
                     dqn_cfg=cfg.get("training", {}),
                     severity=str(cfg.get("scenario", {}).get("severity", "moderate")),
                 )
+                metrics["selected_task"] = route.get("final_task_mode", route.get("task_mode"))
+                metrics["llm_effective_mode"] = client.effective_mode()
+                metrics["router_mode"] = args.router_mode
                 record["metrics"] = metrics
                 record["candidate_path"] = str(candidate_path)
                 record["task_mode"] = route["task_mode"]
@@ -831,6 +867,7 @@ def main() -> None:
 
         summary = {
             "round": round_idx + 1,
+            "selected_task": route.get("final_task_mode", route.get("task_mode")),
             "route": route,
             "planning": planning_json,
             "planning_repaired_from_raw": planning_repaired,
@@ -838,6 +875,13 @@ def main() -> None:
             "best_value": best_candidate["metrics"].get("selection_score"),
             "best_candidate_id": str(best_candidate.get("candidate_id", "")),
             "best_candidate_path": str(best_candidate.get("candidate_path", "")),
+            "success_rate": float(best_candidate["metrics"].get("success_rate", 0.0)),
+            "communication_recovery_ratio": float(best_candidate["metrics"].get("communication_recovery_ratio", 0.0)),
+            "power_recovery_ratio": float(best_candidate["metrics"].get("power_recovery_ratio", 0.0)),
+            "road_recovery_ratio": float(best_candidate["metrics"].get("road_recovery_ratio", 0.0)),
+            "critical_load_recovery_ratio": float(best_candidate["metrics"].get("critical_load_recovery_ratio", 0.0)),
+            "constraint_violation_rate_eval": float(best_candidate["metrics"].get("constraint_violation_rate_eval", 0.0)),
+            "mean_progress_delta_eval": float(best_candidate["metrics"].get("mean_progress_delta_eval", 0.0)),
             "best_candidate": best_candidate,
             "feedback_payload": feedback_payload,
             "router_source": "llm",
@@ -849,6 +893,8 @@ def main() -> None:
             "override_reason": str(route.get("override_reason", "")),
             "selection_diagnostics": selection_diagnostics,
             "llm_feedback": feedback_json,
+            "llm_effective_mode": client.effective_mode(),
+            "router_mode": args.router_mode,
         }
         (round_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
         history.append(summary)
@@ -874,7 +920,16 @@ def main() -> None:
     (run_dir / "llm_call_log.json").write_text(json.dumps(client.call_history, indent=2), encoding="utf-8")
     final_selection_diag = history[-1].get("selection_diagnostics", {}) if history else {}
     (run_dir / "outer_loop_final_summary.json").write_text(
-        json.dumps({"rounds": history, "selection_diagnostics": final_selection_diag, "llm_audit": llm_audit}, indent=2),
+        json.dumps(
+            {
+                "rounds": history,
+                "selection_diagnostics": final_selection_diag,
+                "llm_audit": llm_audit,
+                "llm_effective_mode": client.effective_mode(),
+                "router_mode": args.router_mode,
+            },
+            indent=2,
+        ),
         encoding="utf-8",
     )
     _prune_unused_artifacts(run_dir)

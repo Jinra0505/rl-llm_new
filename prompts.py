@@ -11,8 +11,8 @@ Environment state has 24 dims:
 0:3 power A/B/C, 3:6 comm A/B/C, 6:9 road A/B/C, 9:12 critical load A/B/C,
 12:15 backbone power/comm/road, 15:18 crew power/comm/road, 18 mes location (/2),
 19 mes_soc, 20 material_stock, 21 switching_capability, 22 stage_indicator, 23 constraint_flag.
-Action space has 14 actions:
-0-2 road A/B/C, 3-5 power A/B/C, 6-8 comm A/B/C, 9-11 mes_to A/B/C, 12 feeder_reconfigure, 13 coordinated_balanced.
+Action space has 15 actions:
+0-2 road A/B/C, 3-5 power A/B/C, 6-8 comm A/B/C, 9-11 mes_to A/B/C, 12 feeder_reconfigure, 13 coordinated_balanced, 14 wait_hold.
 """
 
 CODEGEN_PROMPT = """Task mode: {task_mode}, stage: {stage}
@@ -26,22 +26,25 @@ Prioritize system-level recovery over single-layer gains:
 - critical load recovery and completion progress
 - balanced tri-layer recovery across zones
 - lower invalid actions / constraint violations
+- preserve material buffer for late-stage completion
 - avoid invalid or precondition-violating actions
 - do not overuse feeder/coordinated actions when prerequisites are weak (e.g., low mes_soc, low backbone_comm, low material)
 - prioritize low-violation completion in late-stage finishing
+- include explicit signals to reach late stage and complete restoration
 Only output code with revise_state and intrinsic_reward (no extra dependencies/modules).
+Keep code short and robust (target <= 45 lines).
 Return JSON keys: file_name, rationale, code, expected_behavior.
 """
 
 ROUTER_PROMPT = """Select one task mode from:
-- road_opening_priority
-- critical_power_priority
-- backbone_comm_priority
-- coordinated_restoration
-- stabilization_priority
+- critical_load_priority
+- restoration_capability_priority
+- global_efficiency_priority
 Use stage, weakest layer, weakest zone, critical-load shortfall, backbone_comm_ratio, and violation rates.
-Do not over-prioritize communication-only gains when critical-load shortfall is high.
-Prefer critical_power_priority or coordinated_restoration when system-level completion is blocked.
+Do NOT over-select critical_load_priority when shortfall is only moderate.
+Prefer critical_load_priority only when shortfall is clearly dominant and power/critical bottlenecks block completion.
+Prefer restoration_capability_priority when road/communication/resources limit feasible actions.
+Prefer global_efficiency_priority when a balanced multi-layer recovery is needed.
 Return JSON with: task_mode, confidence, reason, stage.
 """
 
@@ -60,6 +63,8 @@ Planning constraints:
 - avoid invalid or precondition-violating actions
 - avoid overusing feeder/coordinated actions when prerequisites are weak
 - prioritize low-violation completion and targeted finishing actions on weakest layer/zone
+- include explicit anti-stagnation strategy for long middle-stage trajectories
+- include resource-preservation strategy to keep enough material for late-stage completion
 Return JSON only.
 """
 
@@ -67,4 +72,9 @@ FEEDBACK_PROMPT = """Given candidate metrics, return JSON with:
 - improvement_focus
 - keep_signals
 - avoid_patterns
+- finish_strategy_adjustments
+Focus feedback on:
+- late-stage entry and completion
+- avoiding middle-stage stagnation with tiny progress
+- sustainable resource usage (material/SOC) for finishing
 """

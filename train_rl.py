@@ -32,6 +32,8 @@ def _action_category(action: int) -> str:
         return "mes"
     if action == 12:
         return "feeder"
+    if action == 14:
+        return "wait"
     return "coordinated"
 
 
@@ -133,7 +135,10 @@ def _valid_action_mask(action_dim: int, info: dict[str, Any]) -> np.ndarray:
             if road_ratio < 0.25:
                 mask[9 + zone_idx] = False
 
-    # Material shortage: mask material-intensive actions first.
+    # Material shortage: strongly suppress material-intensive actions.
+    if material < 0.15:
+        mask[0:9] = False
+        mask[13] = False
     if material < 0.10:
         mask[9:12] = False
         mask[12] = False
@@ -156,9 +161,9 @@ def _valid_action_mask(action_dim: int, info: dict[str, Any]) -> np.ndarray:
             mask[6:9] = False
         elif weak_layer == "1":
             mask[3:6] = False
-    if not mask.any():
-        mask[:] = False
-        mask[3] = True
+    # Always keep wait_hold action feasible for safe resource preservation.
+    if action_dim > 14:
+        mask[14] = True
     return mask
 
 
@@ -247,14 +252,21 @@ def run_training(
         s, info = env.reset(seed=seed + ep)
         ep_reward = 0.0
         ep_violation_count = 0
+        mid_stagnation_steps = 0
 
         for step in range(max_steps_per_episode):
             rs = _effective_state(_call_revise(revise_state_fn, s, info), max_revised_dim)
             valid_mask = _valid_action_mask(action_dim, info)
+            valid_actions = np.where(valid_mask)[0]
+            if valid_actions.size == 0:
+                if action_dim > 14:
+                    valid_mask[14] = True
+                    valid_actions = np.array([14], dtype=int)
+                else:
+                    raise RuntimeError("No feasible action under current mask and no wait action is available.")
 
             eps = eps_end + (eps_start - eps_end) * max(0.0, 1.0 - global_step / float(max(1, eps_decay_steps)))
             if random.random() < eps:
-                valid_actions = np.where(valid_mask)[0]
                 a = int(np.random.choice(valid_actions))
             else:
                 with torch.no_grad():
@@ -282,33 +294,52 @@ def run_training(
             for th, bonus in ((0.75, 0.12), (0.85, 0.18), (0.90, 0.28)):
                 if prev_global < th <= next_global:
                     milestone_bonus += bonus
+            stage_prev = str(info.get("stage", "middle"))
+            stage_next = "late" if float(ns[22]) >= 0.99 else ("middle" if float(ns[22]) >= 0.49 else "early")
+            enter_late_bonus = 0.8 if (stage_prev != "late" and stage_next == "late") else 0.0
             step_ratio = float(step + 1) / float(max_steps_per_episode)
             late_factor = 1.0 + max(0.0, (step_ratio - 0.60) / 0.40) * 1.4
             invalid_penalty = (0.20 + 0.35 * late_factor) if bool(info.get("invalid_action", False)) else 0.0
             constraint_penalty = (0.25 + 0.45 * late_factor) if bool(info.get("constraint_violation", False)) else 0.0
-            completion_bonus = 4.0 if bool(terminated) else 0.0
+            completion_bonus = 6.5 if bool(terminated) else 0.0
             late_stage = str(info.get("stage", "middle")) == "late"
             coordinated_late_penalty = 0.35 if (late_stage and a == 13) else 0.0
             feeder_late_penalty = 0.22 if (late_stage and a == 12 and (float(info.get("backbone_comm_ratio", 1.0)) < 0.5)) else 0.0
             targeted_late_bonus = 0.12 if (late_stage and a in {3, 4, 5, 6, 7, 8}) else 0.0
             weakest_close_bonus = 0.18 * (weak_layer_gain + weak_zone_gain) if late_stage else 0.0
             low_violation_finish_bonus = 0.8 if (terminated and ep_violation_count <= 1) else 0.0
+            material_now = float(info.get("material_stock", ns[20] if len(ns) > 20 else 0.0))
+            material_zero_penalty = 0.8 if material_now <= 0.01 else 0.0
+            critical_low_material_penalty = 0.35 if (material_now < 0.10 and a != 14) else 0.0
+            material_buffer_bonus = 0.06 if (material_now > 0.22 and progress_bonus > 0.0) else 0.0
+            wait_misuse_penalty = 0.18 if (a == 14 and material_now > 0.22 and progress_bonus < 0.0008) else 0.0
+            if str(info.get("stage", "middle")) == "middle" and progress_bonus < 0.0015:
+                mid_stagnation_steps += 1
+            else:
+                mid_stagnation_steps = 0
+            middle_stagnation_penalty = 0.16 if mid_stagnation_steps >= 8 else 0.0
             r = float(
                 ext_r
                 + ir
                 + 0.25 * critical_gain
-                + 0.20 * progress_bonus
+                + 0.32 * progress_bonus
                 + 0.20 * weak_layer_gain
                 + 0.18 * weak_zone_gain
                 + milestone_bonus
+                + enter_late_bonus
                 + completion_bonus
                 + targeted_late_bonus
                 + weakest_close_bonus
                 + low_violation_finish_bonus
+                + material_buffer_bonus
                 - invalid_penalty
                 - constraint_penalty
                 - coordinated_late_penalty
                 - feeder_late_penalty
+                - material_zero_penalty
+                - critical_low_material_penalty
+                - middle_stagnation_penalty
+                - wait_misuse_penalty
             )
             done = bool(terminated or truncated)
 
@@ -409,6 +440,12 @@ def run_training(
         for step_idx in range(max_steps_per_episode):
             rs = _effective_state(_call_revise(revise_state_fn, s, info), max_revised_dim)
             valid_mask = _valid_action_mask(action_dim, info)
+            valid_actions = np.where(valid_mask)[0]
+            if valid_actions.size == 0:
+                if action_dim > 14:
+                    valid_mask[14] = True
+                else:
+                    raise RuntimeError("No feasible action during eval and no wait action is available.")
             with torch.no_grad():
                 qvals = q_net(torch.tensor(rs, dtype=torch.float32).unsqueeze(0))
                 qarr = qvals.squeeze(0).cpu().numpy()
@@ -498,7 +535,7 @@ def run_training(
 
     total_actions = max(1, sum(action_usage.values()))
     action_usage_norm = {k: v / total_actions for k, v in action_usage.items()}
-    action_category_usage = {"road": 0.0, "power": 0.0, "comm": 0.0, "mes": 0.0, "feeder": 0.0, "coordinated": 0.0}
+    action_category_usage = {"road": 0.0, "power": 0.0, "comm": 0.0, "mes": 0.0, "feeder": 0.0, "coordinated": 0.0, "wait": 0.0}
     for a_str, frac in action_usage_norm.items():
         action_category_usage[_action_category(int(a_str))] += float(frac)
     dominant_action_category = max(action_category_usage.items(), key=lambda kv: kv[1])[0]
@@ -614,7 +651,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Lightweight DQN trainer for project recovery env.")
     parser.add_argument("--env", default="project_recovery")
     parser.add_argument("--revise-module", default="")
-    parser.add_argument("--task-mode", default="coordinated_restoration")
+    parser.add_argument("--task-mode", default="global_efficiency_priority")
     parser.add_argument("--llm-mode", default="real")
     parser.add_argument("--config", default="config.yaml")
     parser.add_argument("--output", default="outputs/rl_result.json")
