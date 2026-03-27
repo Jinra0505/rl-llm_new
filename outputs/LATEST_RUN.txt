@@ -1,3 +1,0 @@
-latest_run=outputs/run_20260327_144647
-old_stale_run=outputs/run_20260327_121022
-note=Use files under latest_run for current code outputs.
