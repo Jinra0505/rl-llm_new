@@ -8,8 +8,8 @@ llm:
   max_tokens: 1800
 
 outer_loop:
-  rounds: 1
-  candidates_per_round: 1
+  rounds: 2
+  candidates_per_round: 2
 
 scenario:
   severity: moderate  # mild | moderate | severe
@@ -73,13 +73,11 @@ reward_weights:
   mes_overuse_penalty: 0.03
 
 task_modes:
-  default: coordinated_restoration
+  default: global_efficiency_priority
   allowed:
-    - road_opening_priority
-    - critical_power_priority
-    - backbone_comm_priority
-    - coordinated_restoration
-    - stabilization_priority
+    - critical_load_priority
+    - restoration_capability_priority
+    - global_efficiency_priority
 
 paths:
   generated_dir: generated
