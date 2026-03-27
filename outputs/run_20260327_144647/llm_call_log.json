@@ -1,0 +1,210 @@
+[
+  {
+    "timestamp": "2026-03-27T14:46:49.817914+00:00",
+    "response_kind": "chat",
+    "model": "deepseek-chat",
+    "success": true,
+    "latency_sec": 2.4251492023468018,
+    "error": ""
+  },
+  {
+    "timestamp": "2026-03-27T14:46:52.167422+00:00",
+    "response_kind": "planning",
+    "model": "deepseek-chat",
+    "success": true,
+    "latency_sec": 2.3442962169647217,
+    "error": ""
+  },
+  {
+    "timestamp": "2026-03-27T14:47:14.459797+00:00",
+    "response_kind": "router",
+    "model": "deepseek-reasoner",
+    "success": false,
+    "latency_sec": 22.27914047241211,
+    "error": "Empty content from LLM for response_kind=router, model=deepseek-reasoner"
+  },
+  {
+    "timestamp": "2026-03-27T14:47:37.963292+00:00",
+    "response_kind": "router",
+    "model": "deepseek-reasoner",
+    "success": false,
+    "latency_sec": 22.303269386291504,
+    "error": "Empty content from LLM for response_kind=router, model=deepseek-reasoner"
+  },
+  {
+    "timestamp": "2026-03-27T14:48:02.534115+00:00",
+    "response_kind": "router",
+    "model": "deepseek-reasoner",
+    "success": false,
+    "latency_sec": 22.170631885528564,
+    "error": "Empty content from LLM for response_kind=router, model=deepseek-reasoner"
+  },
+  {
+    "timestamp": "2026-03-27T14:48:09.768299+00:00",
+    "response_kind": "router",
+    "model": "deepseek-chat",
+    "success": true,
+    "latency_sec": 7.2341437339782715,
+    "error": ""
+  },
+  {
+    "timestamp": "2026-03-27T14:48:30.173670+00:00",
+    "response_kind": "planning",
+    "model": "deepseek-chat",
+    "success": true,
+    "latency_sec": 20.40125036239624,
+    "error": ""
+  },
+  {
+    "timestamp": "2026-03-27T14:49:01.910365+00:00",
+    "response_kind": "codegen",
+    "model": "deepseek-chat",
+    "success": true,
+    "latency_sec": 31.732462167739868,
+    "error": ""
+  },
+  {
+    "timestamp": "2026-03-27T14:49:33.993883+00:00",
+    "response_kind": "codegen",
+    "model": "deepseek-chat",
+    "success": true,
+    "latency_sec": 32.07599902153015,
+    "error": ""
+  },
+  {
+    "timestamp": "2026-03-27T14:51:01.850476+00:00",
+    "response_kind": "codegen",
+    "model": "deepseek-chat",
+    "success": true,
+    "latency_sec": 26.76085877418518,
+    "error": ""
+  },
+  {
+    "timestamp": "2026-03-27T14:51:31.137882+00:00",
+    "response_kind": "codegen",
+    "model": "deepseek-chat",
+    "success": true,
+    "latency_sec": 29.280208587646484,
+    "error": ""
+  },
+  {
+    "timestamp": "2026-03-27T14:52:52.816216+00:00",
+    "response_kind": "feedback",
+    "model": "deepseek-reasoner",
+    "success": false,
+    "latency_sec": 23.231773376464844,
+    "error": "Empty content from LLM for response_kind=feedback, model=deepseek-reasoner"
+  },
+  {
+    "timestamp": "2026-03-27T14:53:16.737883+00:00",
+    "response_kind": "feedback",
+    "model": "deepseek-reasoner",
+    "success": false,
+    "latency_sec": 22.72140336036682,
+    "error": "Empty content from LLM for response_kind=feedback, model=deepseek-reasoner"
+  },
+  {
+    "timestamp": "2026-03-27T14:53:41.970037+00:00",
+    "response_kind": "feedback",
+    "model": "deepseek-reasoner",
+    "success": false,
+    "latency_sec": 22.83192467689514,
+    "error": "Empty content from LLM for response_kind=feedback, model=deepseek-reasoner"
+  },
+  {
+    "timestamp": "2026-03-27T14:54:00.128456+00:00",
+    "response_kind": "feedback",
+    "model": "deepseek-chat",
+    "success": true,
+    "latency_sec": 18.1583890914917,
+    "error": ""
+  },
+  {
+    "timestamp": "2026-03-27T14:54:23.225190+00:00",
+    "response_kind": "router",
+    "model": "deepseek-reasoner",
+    "success": false,
+    "latency_sec": 23.08993697166443,
+    "error": "Empty content from LLM for response_kind=router, model=deepseek-reasoner"
+  },
+  {
+    "timestamp": "2026-03-27T14:54:46.889169+00:00",
+    "response_kind": "router",
+    "model": "deepseek-reasoner",
+    "success": false,
+    "latency_sec": 22.463797569274902,
+    "error": "Empty content from LLM for response_kind=router, model=deepseek-reasoner"
+  },
+  {
+    "timestamp": "2026-03-27T14:55:11.561430+00:00",
+    "response_kind": "router",
+    "model": "deepseek-reasoner",
+    "success": false,
+    "latency_sec": 22.27200198173523,
+    "error": "Empty content from LLM for response_kind=router, model=deepseek-reasoner"
+  },
+  {
+    "timestamp": "2026-03-27T14:55:19.990357+00:00",
+    "response_kind": "router",
+    "model": "deepseek-chat",
+    "success": true,
+    "latency_sec": 8.42889928817749,
+    "error": ""
+  },
+  {
+    "timestamp": "2026-03-27T14:55:51.028507+00:00",
+    "response_kind": "planning",
+    "model": "deepseek-chat",
+    "success": true,
+    "latency_sec": 31.033260583877563,
+    "error": ""
+  },
+  {
+    "timestamp": "2026-03-27T14:56:33.776215+00:00",
+    "response_kind": "codegen",
+    "model": "deepseek-chat",
+    "success": true,
+    "latency_sec": 42.742063760757446,
+    "error": ""
+  },
+  {
+    "timestamp": "2026-03-27T14:58:10.285384+00:00",
+    "response_kind": "codegen",
+    "model": "deepseek-chat",
+    "success": true,
+    "latency_sec": 37.97163271903992,
+    "error": ""
+  },
+  {
+    "timestamp": "2026-03-27T14:59:34.683618+00:00",
+    "response_kind": "feedback",
+    "model": "deepseek-reasoner",
+    "success": false,
+    "latency_sec": 23.862974405288696,
+    "error": "Empty content from LLM for response_kind=feedback, model=deepseek-reasoner"
+  },
+  {
+    "timestamp": "2026-03-27T14:59:59.238708+00:00",
+    "response_kind": "feedback",
+    "model": "deepseek-reasoner",
+    "success": false,
+    "latency_sec": 23.35489583015442,
+    "error": "Empty content from LLM for response_kind=feedback, model=deepseek-reasoner"
+  },
+  {
+    "timestamp": "2026-03-27T15:00:26.306713+00:00",
+    "response_kind": "feedback",
+    "model": "deepseek-reasoner",
+    "success": false,
+    "latency_sec": 24.66779398918152,
+    "error": "Empty content from LLM for response_kind=feedback, model=deepseek-reasoner"
+  },
+  {
+    "timestamp": "2026-03-27T15:00:40.980625+00:00",
+    "response_kind": "feedback",
+    "model": "deepseek-chat",
+    "success": true,
+    "latency_sec": 14.673872709274292,
+    "error": ""
+  }
+]
