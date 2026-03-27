@@ -35,6 +35,7 @@ env:
     11: mes_to_C
     12: feeder_reconfigure
     13: coordinated_balanced
+    14: wait_hold
 
 training:
   train_episodes: 120
@@ -55,12 +56,12 @@ selection:
   higher_is_better: true
   task_mode_metric_weights:
     __global__:
-      eval_success_rate: 0.40
-      critical_load_recovery_ratio: 0.25
-      min_recovery_ratio: 0.20
-      constraint_violation_rate_eval: -0.35
-      mean_progress_delta_eval: 0.08
-      late_stage_targeted_action_rate: 0.08
+      eval_success_rate: 0.48
+      critical_load_recovery_ratio: 0.24
+      min_recovery_ratio: 0.18
+      mean_progress_delta_eval: 0.16
+      constraint_violation_rate_eval: -0.18
+      late_stage_targeted_action_rate: 0.10
 
 reward_weights:
   delta_power: 0.20

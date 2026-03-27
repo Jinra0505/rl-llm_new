@@ -156,7 +156,11 @@ def _semantic_validate_candidate(code: str, max_revised_dim: int | None = None) 
         except Exception as exc:  # noqa: BLE001
             errors.append(f"Semantic validation: revise_state failed on sample {idx}: {exc}")
             continue
-        arr = np.asarray(rs, dtype=float)
+        try:
+            arr = np.asarray(rs, dtype=float)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"Semantic validation: revise_state output is not numeric array-like on sample {idx}: {exc}")
+            continue
         if arr.ndim != 1:
             errors.append(f"Semantic validation: revise_state output must be 1-D, got ndim={arr.ndim} on sample {idx}")
             continue
@@ -271,11 +275,13 @@ def _action_category(action: int) -> str:
         return "mes"
     if action == 12:
         return "feeder"
+    if action == 14:
+        return "wait"
     return "coordinated"
 
 
 def _aggregate_action_category_distribution(action_usage: dict[str, Any]) -> dict[str, float]:
-    cats = {"road": 0.0, "power": 0.0, "comm": 0.0, "mes": 0.0, "feeder": 0.0, "coordinated": 0.0}
+    cats = {"road": 0.0, "power": 0.0, "comm": 0.0, "mes": 0.0, "feeder": 0.0, "coordinated": 0.0, "wait": 0.0}
     for action_str, val in action_usage.items():
         try:
             action = int(action_str)
@@ -364,6 +370,7 @@ def collect_routing_context(
             "backbone_comm_ratio": float(previous_metrics.get("backbone_comm_ratio", previous_metrics.get("communication_recovery_ratio", 0.0))),
             "backbone_power_ratio": float(previous_metrics.get("backbone_power_ratio", previous_metrics.get("power_recovery_ratio", 0.0))),
             "backbone_road_ratio": float(previous_metrics.get("backbone_road_ratio", previous_metrics.get("road_recovery_ratio", 0.0))),
+            "material_stock": float(previous_metrics.get("material_stock_end_mean", previous_metrics.get("material_stock_mean_end", 1.0))),
             "weakest_zone": str(previous_metrics.get("weakest_zone", "A")),
             "weakest_layer": str(previous_metrics.get("weakest_layer", "0")),
             "constraint_violation_count": int(previous_metrics.get("constraint_violation_count", 0)),
@@ -396,6 +403,7 @@ def collect_routing_context(
             "backbone_comm_ratio": float(last_info.get("backbone_comm_ratio", last_info.get("communication_recovery_ratio", 0.0))),
             "backbone_power_ratio": float(last_info.get("backbone_power_ratio", last_info.get("power_recovery_ratio", 0.0))),
             "backbone_road_ratio": float(last_info.get("backbone_road_ratio", last_info.get("road_recovery_ratio", 0.0))),
+            "material_stock": float(last_info.get("material_stock", 1.0)),
             "weakest_zone": str(last_info.get("weakest_zone", "A")),
             "weakest_layer": str(last_info.get("weakest_layer", "0")),
             "constraint_violation_count": int(last_info.get("constraint_violation_count", 0)),
@@ -504,6 +512,8 @@ def select_best_candidate(round_candidates: list[dict[str, Any]], reference_metr
             comm = _safe_float(metrics.get("communication_recovery_ratio", 0.0))
             road = _safe_float(metrics.get("road_recovery_ratio", 0.0))
             violation = _safe_float(metrics.get("constraint_violation_rate_eval", 1.0), default=1.0)
+            material_end = _safe_float(metrics.get("material_stock_end_mean", metrics.get("material_stock_mean_end", 0.0)))
+            invalid_rate = _safe_float(metrics.get("invalid_action_rate_eval", metrics.get("invalid_action_rate", 1.0)))
             rep = metrics.get("representative_eval_summary", {}) if isinstance(metrics.get("representative_eval_summary"), dict) else {}
             final_progress_delta = _safe_float(rep.get("final_progress_delta", 0.0))
             final_stage = str(rep.get("final_stage", "unknown"))
@@ -527,6 +537,10 @@ def select_best_candidate(round_candidates: list[dict[str, Any]], reference_metr
                 avg_recovery = (power + comm + road) / 3.0
                 if violation < ref_violation and avg_recovery < (ref_avg_recovery - 0.08):
                     reasons.append("violation_improved_but_recovery_collapsed")
+            if material_end < 0.03 and (invalid_rate > 0.45 or progress < 0.001):
+                reasons.append("resource_sustainability_collapse")
+            if final_stage != "late" and progress < 0.0009 and critical < 0.55:
+                reasons.append("not_finish_oriented_under_zero_success")
 
         if reasons:
             rejected_ids.append(cid)
@@ -537,12 +551,26 @@ def select_best_candidate(round_candidates: list[dict[str, Any]], reference_metr
     pool = accepted if accepted else [c for c in round_candidates if isinstance(c.get("metrics"), dict)]
     if not pool:
         raise RuntimeError("No candidate with metrics is available for selection.")
-    best_metrics = select_best([c["metrics"] for c in pool], "selection_score", higher_is_better)
-    best_candidate = next(c for c in pool if c["metrics"] is best_metrics)
+    all_zero_success = all(_safe_float(c.get("metrics", {}).get("success_rate", 0.0)) <= 0.0 for c in pool)
+    if all_zero_success:
+        def zero_success_rank_key(c: dict[str, Any]) -> tuple[float, float, float, float]:
+            m = c.get("metrics", {})
+            stage_close = _safe_float(m.get("mean_stage_indicator_eval", 0.0))
+            critical = _safe_float(m.get("critical_load_recovery_ratio", 0.0))
+            prog = _safe_float(m.get("mean_progress_delta_eval", m.get("mean_progress_delta", 0.0)))
+            material = _safe_float(m.get("material_stock_end_mean", m.get("material_stock_mean_end", 0.0)))
+            violation = _safe_float(m.get("constraint_violation_rate_eval", 1.0), default=1.0)
+            return (stage_close, critical, prog, material, -violation)
+        best_candidate = sorted(pool, key=zero_success_rank_key, reverse=True)[0]
+        best_metrics = best_candidate["metrics"]
+    else:
+        best_metrics = select_best([c["metrics"] for c in pool], "selection_score", higher_is_better)
+        best_candidate = next(c for c in pool if c["metrics"] is best_metrics)
     return {
         "best_candidate": best_candidate,
         "selection_diagnostics": {
             "selection_policy": "gate_then_score",
+            "zero_success_policy_applied": all_zero_success,
             "accepted_ids": [str(c.get("candidate_id", "")) for c in accepted],
             "rejected_ids": rejected_ids,
             "rejection_reasons": rejection_reasons,
@@ -635,17 +663,44 @@ def main() -> None:
         prev_metrics = previous_best.get("metrics", {}) if previous_best else {}
         routing_context = collect_routing_context(args.env, prev_metrics, cfg, previous_best_candidate=previous_best)
 
-        if round_idx == 0 or args.reroute_each_round:
-            try:
-                route = route_llm(client, SYSTEM_PROMPT, ROUTER_PROMPT, routing_context)
-            except Exception as exc:  # noqa: BLE001
-                _write_failure_artifacts(run_dir, "router", exc, client)
-                raise
-            if route["task_mode"] not in TASK_MODE_ALLOWED:
-                route["task_mode"] = "global_efficiency_priority"
-                route["final_task_mode"] = route["task_mode"]
+        try:
+            route = route_llm(client, SYSTEM_PROMPT, ROUTER_PROMPT, routing_context)
+        except Exception as exc:  # noqa: BLE001
+            _write_failure_artifacts(run_dir, "router", exc, client)
+            raise
+        if route["task_mode"] not in TASK_MODE_ALLOWED:
+            route["task_mode"] = "global_efficiency_priority"
+            route["final_task_mode"] = route["task_mode"]
+            route["override_applied"] = True
+            route["override_reason"] = "task_mode normalized to simplified 3-task formal set"
+        env_s = routing_context.get("env_summary", {})
+        traj_s = routing_context.get("trajectory_summary", {})
+        mat = float(env_s.get("material_stock", prev_metrics.get("material_stock_end_mean", 1.0) if previous_best else 1.0))
+        comm = float(env_s.get("communication_recovery_ratio", 0.0))
+        road = float(env_s.get("road_recovery_ratio", 0.0))
+        shortfall = float(env_s.get("critical_load_shortfall", 1.0))
+        violation = float(traj_s.get("constraint_violation_rate", 0.0))
+        mean_prog = float(traj_s.get("mean_progress_delta", 0.0))
+        if round_idx > 0:
+            layer_gap = max(comm, float(env_s.get("power_recovery_ratio", 0.0)), road) - min(
+                comm, float(env_s.get("power_recovery_ratio", 0.0)), road
+            )
+            avg_recovery = (comm + float(env_s.get("power_recovery_ratio", 0.0)) + road) / 3.0
+            if mat < 0.16 or violation > 0.18 or min(comm, road) < 0.55:
+                route["final_task_mode"] = "restoration_capability_priority"
+                route["task_mode"] = "restoration_capability_priority"
                 route["override_applied"] = True
-                route["override_reason"] = "task_mode normalized to simplified 3-task formal set"
+                route["override_reason"] = "Round reroute: resource/road/comm constraints dominate."
+            elif avg_recovery > 0.52 and layer_gap < 0.18 and shortfall < 0.50:
+                route["final_task_mode"] = "global_efficiency_priority"
+                route["task_mode"] = "global_efficiency_priority"
+                route["override_applied"] = True
+                route["override_reason"] = "Round reroute: recovery is broader and incomplete."
+            elif shortfall > 0.45 and float(env_s.get("power_recovery_ratio", 0.0)) < 0.58:
+                route["final_task_mode"] = "critical_load_priority"
+                route["task_mode"] = "critical_load_priority"
+                route["override_applied"] = True
+                route["override_reason"] = "Round reroute: critical shortfall remains dominant bottleneck."
 
         round_dir = run_dir / f"round_{round_idx+1}"
         round_dir.mkdir(parents=True, exist_ok=True)
@@ -657,14 +712,13 @@ def main() -> None:
             previous_feedback=(history[-1].get("llm_feedback", {}) if history else None),
         )
         try:
-            planning_raw = client.chat(
+            planning_json = client.chat_json(
                 [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": PLANNING_PROMPT + "\n\n" + json.dumps(planning_payload, indent=2)}],
                 response_kind="planning",
                 sample_idx=round_idx,
             )
-            planning_json, planning_repaired = parse_json_with_repair(planning_raw)
-            if not planning_json:
-                raise RuntimeError("Planning stage JSON parse failed under real LLM run.")
+            planning_raw = json.dumps(planning_json, ensure_ascii=False, indent=2)
+            planning_repaired = False
         except Exception as exc:  # noqa: BLE001
             _write_failure_artifacts(run_dir, "planning", exc, client)
             raise
@@ -687,6 +741,10 @@ def main() -> None:
                 planning_json=json.dumps(planning_json, indent=2, ensure_ascii=False),
             )
             prompt += "\n\nReturn compact JSON and keep generated code concise (<= 45 lines)."
+            prompt += (
+                "\nCode must include explicit finish-oriented shaping: reward entering late stage, reward completion, "
+                "penalize prolonged middle-stage tiny progress, and penalize resource collapse."
+            )
             if history:
                 prompt += "\n\nLatest feedback:\n" + json.dumps(history[-1].get("feedback_payload", {}), indent=2)
             raw = "{}"

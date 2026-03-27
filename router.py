@@ -55,7 +55,15 @@ def route_rule(routing_context: dict[str, Any]) -> dict[str, Any]:
     avg = (comm + power + road) / 3.0
     stage = "early" if avg < 0.35 else "middle" if avg < 0.75 else "late"
 
-    if shortfall > 0.30 or weakest_layer_idx == "0":
+    if material < 0.16 or (min(comm, road) < 0.50 and stage != "late"):
+        return {
+            "task_mode": "restoration_capability_priority",
+            "confidence": 0.86,
+            "reason": "Material/road/communication constraints dominate feasible restoration actions.",
+            "stage": stage,
+        }
+
+    if shortfall > 0.42 and weakest_layer_idx == "0":
         return {
             "task_mode": "critical_load_priority",
             "confidence": 0.87,
@@ -77,12 +85,15 @@ def route_rule(routing_context: dict[str, Any]) -> dict[str, Any]:
             "reason": "Communication capability is limiting dispatch/coordination.",
             "stage": stage,
         }
-    return {
-        "task_mode": "global_efficiency_priority",
-        "confidence": 0.79,
-        "reason": "Balanced multi-layer optimization is currently preferred.",
-        "stage": stage,
-    }
+    balance_gap = max(comm, power, road) - min(comm, power, road)
+    if avg >= 0.52 and balance_gap < 0.18 and shortfall < 0.48:
+        return {
+            "task_mode": "global_efficiency_priority",
+            "confidence": 0.8,
+            "reason": "Recovery is broadly balanced but incomplete; optimize global finishing efficiency.",
+            "stage": stage,
+        }
+    return {"task_mode": "restoration_capability_priority", "confidence": 0.77, "reason": "Prefer capability restoration before global balancing.", "stage": stage}
 
 
 def route_llm(client: LLMClient, system_prompt: str, router_prompt: str, routing_context: dict[str, Any]) -> dict[str, Any]:
