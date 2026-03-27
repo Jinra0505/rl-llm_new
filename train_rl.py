@@ -614,7 +614,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Lightweight DQN trainer for project recovery env.")
     parser.add_argument("--env", default="project_recovery")
     parser.add_argument("--revise-module", default="")
-    parser.add_argument("--task-mode", default="coordinated_restoration")
+    parser.add_argument("--task-mode", default="global_efficiency_priority")
     parser.add_argument("--llm-mode", default="real")
     parser.add_argument("--config", default="config.yaml")
     parser.add_argument("--output", default="outputs/rl_result.json")

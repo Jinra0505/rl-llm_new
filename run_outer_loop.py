@@ -21,6 +21,11 @@ from router import route_llm, summarize_trajectory
 from train_rl import run_training
 
 LOGGER = logging.getLogger(__name__)
+TASK_MODE_ALLOWED = {
+    "critical_load_priority",
+    "restoration_capability_priority",
+    "global_efficiency_priority",
+}
 ALLOWED_IMPORTS = {"numpy", "math", "__future__"}
 FORBIDDEN_CALLS = {"eval", "exec", "compile", "open", "__import__", "input"}
 
@@ -441,7 +446,7 @@ def build_feedback(best_candidate: dict[str, Any], score_metric: str) -> dict[st
 
 def build_planning_payload(route: dict[str, Any], routing_context: dict[str, Any], previous_feedback: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
-        "task_mode": str(route.get("task_mode", "coordinated_restoration")),
+        "task_mode": str(route.get("task_mode", "global_efficiency_priority")),
         "stage": str(route.get("stage", "middle")),
         "route_reason": str(route.get("reason", "")),
         "routing_context": routing_context,
@@ -636,6 +641,11 @@ def main() -> None:
             except Exception as exc:  # noqa: BLE001
                 _write_failure_artifacts(run_dir, "router", exc, client)
                 raise
+            if route["task_mode"] not in TASK_MODE_ALLOWED:
+                route["task_mode"] = "global_efficiency_priority"
+                route["final_task_mode"] = route["task_mode"]
+                route["override_applied"] = True
+                route["override_reason"] = "task_mode normalized to simplified 3-task formal set"
 
         round_dir = run_dir / f"round_{round_idx+1}"
         round_dir.mkdir(parents=True, exist_ok=True)
@@ -793,6 +803,9 @@ def main() -> None:
                     dqn_cfg=cfg.get("training", {}),
                     severity=str(cfg.get("scenario", {}).get("severity", "moderate")),
                 )
+                metrics["selected_task"] = route.get("final_task_mode", route.get("task_mode"))
+                metrics["llm_effective_mode"] = client.effective_mode()
+                metrics["router_mode"] = args.router_mode
                 record["metrics"] = metrics
                 record["candidate_path"] = str(candidate_path)
                 record["task_mode"] = route["task_mode"]
@@ -831,6 +844,7 @@ def main() -> None:
 
         summary = {
             "round": round_idx + 1,
+            "selected_task": route.get("final_task_mode", route.get("task_mode")),
             "route": route,
             "planning": planning_json,
             "planning_repaired_from_raw": planning_repaired,
@@ -838,6 +852,13 @@ def main() -> None:
             "best_value": best_candidate["metrics"].get("selection_score"),
             "best_candidate_id": str(best_candidate.get("candidate_id", "")),
             "best_candidate_path": str(best_candidate.get("candidate_path", "")),
+            "success_rate": float(best_candidate["metrics"].get("success_rate", 0.0)),
+            "communication_recovery_ratio": float(best_candidate["metrics"].get("communication_recovery_ratio", 0.0)),
+            "power_recovery_ratio": float(best_candidate["metrics"].get("power_recovery_ratio", 0.0)),
+            "road_recovery_ratio": float(best_candidate["metrics"].get("road_recovery_ratio", 0.0)),
+            "critical_load_recovery_ratio": float(best_candidate["metrics"].get("critical_load_recovery_ratio", 0.0)),
+            "constraint_violation_rate_eval": float(best_candidate["metrics"].get("constraint_violation_rate_eval", 0.0)),
+            "mean_progress_delta_eval": float(best_candidate["metrics"].get("mean_progress_delta_eval", 0.0)),
             "best_candidate": best_candidate,
             "feedback_payload": feedback_payload,
             "router_source": "llm",
@@ -849,6 +870,8 @@ def main() -> None:
             "override_reason": str(route.get("override_reason", "")),
             "selection_diagnostics": selection_diagnostics,
             "llm_feedback": feedback_json,
+            "llm_effective_mode": client.effective_mode(),
+            "router_mode": args.router_mode,
         }
         (round_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
         history.append(summary)
@@ -874,7 +897,16 @@ def main() -> None:
     (run_dir / "llm_call_log.json").write_text(json.dumps(client.call_history, indent=2), encoding="utf-8")
     final_selection_diag = history[-1].get("selection_diagnostics", {}) if history else {}
     (run_dir / "outer_loop_final_summary.json").write_text(
-        json.dumps({"rounds": history, "selection_diagnostics": final_selection_diag, "llm_audit": llm_audit}, indent=2),
+        json.dumps(
+            {
+                "rounds": history,
+                "selection_diagnostics": final_selection_diag,
+                "llm_audit": llm_audit,
+                "llm_effective_mode": client.effective_mode(),
+                "router_mode": args.router_mode,
+            },
+            indent=2,
+        ),
         encoding="utf-8",
     )
     _prune_unused_artifacts(run_dir)
