@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Formal-run LLM client (real-only, no automatic mock fallback)."""
+"""Formal-run LLM client (strict real-only mode)."""
 
 import json
 import os
@@ -10,12 +10,7 @@ from typing import Any
 
 
 class LLMClient:
-    """DeepSeek-compatible OpenAI client for formal runs.
-
-    Notes:
-    - Formal path is strictly real-only.
-    - `_mock_response` is kept as test-only helper and is unreachable from formal CLI flows.
-    """
+    """DeepSeek-compatible OpenAI client for formal runs."""
 
     def __init__(
         self,
@@ -66,7 +61,6 @@ class LLMClient:
 
     @property
     def using_mock(self) -> bool:
-        # Kept for backward compatibility with existing code paths; formal mode is always real.
         return False
 
     def effective_mode(self) -> str:
@@ -99,7 +93,7 @@ class LLMClient:
             self.last_error = error
 
     def chat(self, messages: list[dict[str, str]], response_kind: str = "chat", sample_idx: int = 0) -> str:
-        _ = sample_idx  # test-only placeholder; formal path never uses mock sampling.
+        _ = sample_idx
         return self._real_chat(messages, response_kind=response_kind)
 
     def chat_json(self, messages: list[dict[str, str]], response_kind: str = "chat", sample_idx: int = 0) -> dict[str, Any]:
@@ -139,10 +133,12 @@ class LLMClient:
         return self.chat_model
 
     def _max_tokens_for_kind(self, response_kind: str) -> int:
-        if response_kind in {"router", "planning", "feedback"}:
+        if response_kind in {"router", "feedback"}:
             return int(min(self.max_tokens, 600))
+        if response_kind == "planning":
+            return int(min(self.max_tokens, 1000))
         if response_kind == "codegen":
-            return int(min(self.max_tokens, 800))
+            return int(min(self.max_tokens, 1400))
         return int(self.max_tokens)
 
     def _temperature_for_kind(self, response_kind: str) -> float:
@@ -176,12 +172,6 @@ class LLMClient:
             self.preflight_reasoner_model()
         except Exception as exc:  # noqa: BLE001
             raise RuntimeError(f"LLM preflight check failed. {exc}") from exc
-
-    # test-only helper
-    def _mock_response(self, response_kind: str, sample_idx: int) -> str:
-        _ = response_kind
-        _ = sample_idx
-        return "{}"
 
     def _real_chat(self, messages: list[dict[str, str]], response_kind: str = "chat") -> str:
         from openai import OpenAI
