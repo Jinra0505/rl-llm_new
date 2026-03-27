@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
-from collections import Counter
+"""Backward-compatible wrappers around the explicit task recognizer modules."""
+
 from typing import Any
 
 from llm_client import LLMClient
-
+from task_recognizer import ScenarioTaskRecognizer, summarize_trajectory
 
 TASKS = [
     "critical_load_priority",
@@ -13,104 +13,13 @@ TASKS = [
     "global_efficiency_priority",
 ]
 
-
-def summarize_trajectory(trajectory: list[dict[str, Any]]) -> dict[str, Any]:
-    if not trajectory:
-        return {"mean_progress_delta": 0.0, "invalid_action_rate": 0.0, "constraint_violation_rate": 0.0, "stage_distribution": {}, "length": 0}
-    n = len(trajectory)
-    progress = [float(t.get("info", {}).get("progress_delta", 0.0)) for t in trajectory]
-    invalid = [1.0 if t.get("info", {}).get("invalid_action", False) else 0.0 for t in trajectory]
-    violate = [1.0 if t.get("info", {}).get("constraint_violation", False) else 0.0 for t in trajectory]
-    stages = [t.get("info", {}).get("stage", "unknown") for t in trajectory]
-    return {
-        "mean_progress_delta": sum(progress) / n,
-        "invalid_action_rate": sum(invalid) / n,
-        "constraint_violation_rate": sum(violate) / n,
-        "stage_distribution": {k: v / n for k, v in Counter(stages).items()},
-        "length": n,
-    }
+_RECOGNIZER = ScenarioTaskRecognizer()
 
 
 def route_rule(routing_context: dict[str, Any]) -> dict[str, Any]:
-    env = routing_context.get("env_summary", {})
-    traj = routing_context.get("trajectory_summary", {})
-
-    comm = float(env.get("communication_recovery_ratio", 0.0))
-    power = float(env.get("power_recovery_ratio", 0.0))
-    road = float(env.get("road_recovery_ratio", 0.0))
-    shortfall = float(env.get("critical_load_shortfall", 1.0))
-    backbone_comm = float(env.get("backbone_comm_ratio", comm))
-    material = float(env.get("material_stock", 1.0))
-    weakest_zone = str(env.get("weakest_zone", "A"))
-    weakest_layer_idx = str(env.get("weakest_layer", "0"))
-
-    if traj.get("constraint_violation_rate", 0.0) > 0.28:
-        return {
-            "task_mode": "restoration_capability_priority",
-            "confidence": 0.84,
-            "reason": "Frequent violations observed; prioritize capability restoration and safer actions.",
-            "stage": "late",
-        }
-
-    avg = (comm + power + road) / 3.0
-    stage = "early" if avg < 0.35 else "middle" if avg < 0.75 else "late"
-
-    if material < 0.16 or (min(comm, road) < 0.50 and stage != "late"):
-        return {
-            "task_mode": "restoration_capability_priority",
-            "confidence": 0.86,
-            "reason": "Material/road/communication constraints dominate feasible restoration actions.",
-            "stage": stage,
-        }
-
-    if shortfall > 0.42 and weakest_layer_idx == "0":
-        return {
-            "task_mode": "critical_load_priority",
-            "confidence": 0.87,
-            "reason": "Critical-load shortfall/high power weakness dominates.",
-            "stage": stage,
-        }
-
-    if stage == "early" and (road < min(comm, power) or material < 0.35):
-        return {
-            "task_mode": "restoration_capability_priority",
-            "confidence": 0.81,
-            "reason": f"Early-stage bottlenecks in road/resources around zone {weakest_zone}.",
-            "stage": stage,
-        }
-    if weakest_layer_idx == "1" and min(comm, backbone_comm) < 0.65:
-        return {
-            "task_mode": "restoration_capability_priority",
-            "confidence": 0.8,
-            "reason": "Communication capability is limiting dispatch/coordination.",
-            "stage": stage,
-        }
-    balance_gap = max(comm, power, road) - min(comm, power, road)
-    if avg >= 0.52 and balance_gap < 0.18 and shortfall < 0.48:
-        return {
-            "task_mode": "global_efficiency_priority",
-            "confidence": 0.8,
-            "reason": "Recovery is broadly balanced but incomplete; optimize global finishing efficiency.",
-            "stage": stage,
-        }
-    return {"task_mode": "restoration_capability_priority", "confidence": 0.77, "reason": "Prefer capability restoration before global balancing.", "stage": stage}
+    return _RECOGNIZER.recognize_rule(routing_context)
 
 
 def route_llm(client: LLMClient, system_prompt: str, router_prompt: str, routing_context: dict[str, Any]) -> dict[str, Any]:
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": router_prompt + "\n\nContext:\n" + json.dumps(routing_context, indent=2)},
-    ]
-    route = client.chat_json(messages, response_kind="router")
-    for key in ["task_mode", "confidence", "reason", "stage"]:
-        if key not in route:
-            raise ValueError(f"Router response missing key: {key}")
-    if route["task_mode"] not in TASKS:
-        raise ValueError(f"Router returned invalid task_mode: {route['task_mode']}")
-    route["source"] = "llm"
-    route["model"] = client.reasoner_model
-    route["llm_task_mode_raw"] = route["task_mode"]
-    route["final_task_mode"] = route["task_mode"]
-    route["override_applied"] = False
-    route["override_reason"] = ""
-    return route
+    _ = router_prompt  # Prompt now constructed by task_recognition_prompt.build_task_recognition_prompt.
+    return _RECOGNIZER.recognize_with_llm(client=client, system_prompt=system_prompt, routing_context=routing_context)

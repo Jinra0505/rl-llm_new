@@ -46,6 +46,8 @@ Prefer critical_load_priority only when shortfall is clearly dominant and power/
 Prefer restoration_capability_priority when road/communication/resources limit feasible actions.
 Prefer global_efficiency_priority when a balanced multi-layer recovery is needed.
 Return JSON with: task_mode, confidence, reason, stage.
+Round-2 switching rule:
+- If previous round shows low success, low progress, or unfinished middle-stage behavior, switch task_mode from previous round unless there is strong evidence the same task is still the dominant bottleneck.
 """
 
 PLANNING_PROMPT = """Using the routing context + task_mode + stage, produce a concise shaping planning JSON.
@@ -65,6 +67,8 @@ Planning constraints:
 - prioritize low-violation completion and targeted finishing actions on weakest layer/zone
 - include explicit anti-stagnation strategy for long middle-stage trajectories
 - include resource-preservation strategy to keep enough material for late-stage completion
+- include explicit anti-wait-overuse rule: wait_hold should be safety-only, not dominant when feasible recovery actions exist
+- include explicit round-specific task-switch rationale tied to prior-round failure patterns
 Return JSON only.
 """
 
@@ -77,4 +81,6 @@ Focus feedback on:
 - late-stage entry and completion
 - avoiding middle-stage stagnation with tiny progress
 - sustainable resource usage (material/SOC) for finishing
+- avoiding repeated wait_hold in middle stage when feasible alternatives exist
+- enforcing meaningful task switching in round 2 when round 1 underperforms
 """

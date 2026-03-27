@@ -16,8 +16,8 @@ import yaml
 
 from llm_client import LLMClient
 from mock_recovery_env import ProjectRecoveryEnv
-from prompts import CODEGEN_PROMPT, FEEDBACK_PROMPT, PLANNING_PROMPT, ROUTER_PROMPT, SYSTEM_PROMPT
-from router import route_llm, summarize_trajectory
+from prompts import CODEGEN_PROMPT, FEEDBACK_PROMPT, PLANNING_PROMPT, SYSTEM_PROMPT
+from task_recognizer import ScenarioTaskRecognizer, summarize_trajectory
 from train_rl import run_training
 
 LOGGER = logging.getLogger(__name__)
@@ -81,34 +81,6 @@ def parse_json_with_repair(raw: str) -> tuple[dict[str, Any], bool]:
             except json.JSONDecodeError:
                 return {}, True
     return {}, True
-
-
-def recover_candidate_payload_from_raw(raw: str, task_mode: str, stage: str) -> dict[str, Any]:
-    text = raw.strip()
-    if not text:
-        return {}
-    code = ""
-    if "```" in text:
-        chunks = text.split("```")
-        for chunk in chunks:
-            c = chunk.strip()
-            if c.startswith("python"):
-                c = c[len("python") :].strip()
-            if "def revise_state" in c and "def intrinsic_reward" in c:
-                code = c
-                break
-    if not code and "def revise_state" in text and "def intrinsic_reward" in text:
-        code = text
-    if not code:
-        return {}
-    safe_task = "".join(ch for ch in task_mode if ch.isalnum() or ch == "_").strip("_") or "candidate"
-    safe_stage = "".join(ch for ch in stage if ch.isalnum() or ch == "_").strip("_") or "stage"
-    return {
-        "file_name": f"{safe_task}_{safe_stage}.py",
-        "rationale": "Recovered candidate payload from non-JSON model output.",
-        "code": code,
-        "expected_behavior": "LLM-generated recovery shaping candidate.",
-    }
 
 
 def _write_failure_artifacts(run_dir: Path, failed_stage: str, error: Exception, client: LLMClient) -> None:
@@ -514,6 +486,7 @@ def select_best_candidate(round_candidates: list[dict[str, Any]], reference_metr
             violation = _safe_float(metrics.get("constraint_violation_rate_eval", 1.0), default=1.0)
             material_end = _safe_float(metrics.get("material_stock_end_mean", metrics.get("material_stock_mean_end", 0.0)))
             invalid_rate = _safe_float(metrics.get("invalid_action_rate_eval", metrics.get("invalid_action_rate", 1.0)))
+            wait_usage = _safe_float(metrics.get("wait_hold_usage_eval", metrics.get("wait_hold_usage", 0.0)))
             rep = metrics.get("representative_eval_summary", {}) if isinstance(metrics.get("representative_eval_summary"), dict) else {}
             final_progress_delta = _safe_float(rep.get("final_progress_delta", 0.0))
             final_stage = str(rep.get("final_stage", "unknown"))
@@ -541,6 +514,8 @@ def select_best_candidate(round_candidates: list[dict[str, Any]], reference_metr
                 reasons.append("resource_sustainability_collapse")
             if final_stage != "late" and progress < 0.0009 and critical < 0.55:
                 reasons.append("not_finish_oriented_under_zero_success")
+            if wait_usage > 0.42 and progress < 0.006:
+                reasons.append("wait_hold_overuse_with_low_progress")
 
         if reasons:
             rejected_ids.append(cid)
@@ -553,14 +528,15 @@ def select_best_candidate(round_candidates: list[dict[str, Any]], reference_metr
         raise RuntimeError("No candidate with metrics is available for selection.")
     all_zero_success = all(_safe_float(c.get("metrics", {}).get("success_rate", 0.0)) <= 0.0 for c in pool)
     if all_zero_success:
-        def zero_success_rank_key(c: dict[str, Any]) -> tuple[float, float, float, float]:
+        def zero_success_rank_key(c: dict[str, Any]) -> tuple[float, float, float, float, float]:
             m = c.get("metrics", {})
             stage_close = _safe_float(m.get("mean_stage_indicator_eval", 0.0))
             critical = _safe_float(m.get("critical_load_recovery_ratio", 0.0))
             prog = _safe_float(m.get("mean_progress_delta_eval", m.get("mean_progress_delta", 0.0)))
             material = _safe_float(m.get("material_stock_end_mean", m.get("material_stock_mean_end", 0.0)))
+            wait_usage = _safe_float(m.get("wait_hold_usage_eval", m.get("wait_hold_usage", 0.0)))
             violation = _safe_float(m.get("constraint_violation_rate_eval", 1.0), default=1.0)
-            return (stage_close, critical, prog, material, -violation)
+            return (stage_close, critical, prog, material, -wait_usage, -violation)
         best_candidate = sorted(pool, key=zero_success_rank_key, reverse=True)[0]
         best_metrics = best_candidate["metrics"]
     else:
@@ -657,22 +633,28 @@ def main() -> None:
 
     history: list[dict[str, Any]] = []
     route: dict[str, Any] = {}
+    recognizer = ScenarioTaskRecognizer()
 
     for round_idx in range(rounds):
         previous_best = history[-1].get("best_candidate", {}) if history else None
         prev_metrics = previous_best.get("metrics", {}) if previous_best else {}
         routing_context = collect_routing_context(args.env, prev_metrics, cfg, previous_best_candidate=previous_best)
 
+        previous_task = str(history[-1].get("selected_task", "")) if history else ""
+        previous_round_failed = bool(float(prev_metrics.get("success_rate", 0.0)) <= 0.0) if previous_best else False
         try:
-            route = route_llm(client, SYSTEM_PROMPT, ROUTER_PROMPT, routing_context)
+            route = recognizer.recognize_with_llm(
+                client=client,
+                system_prompt=SYSTEM_PROMPT,
+                routing_context=routing_context,
+                previous_task=previous_task,
+                previous_round_failed=previous_round_failed,
+            )
         except Exception as exc:  # noqa: BLE001
             _write_failure_artifacts(run_dir, "router", exc, client)
             raise
         if route["task_mode"] not in TASK_MODE_ALLOWED:
-            route["task_mode"] = "global_efficiency_priority"
-            route["final_task_mode"] = route["task_mode"]
-            route["override_applied"] = True
-            route["override_reason"] = "task_mode normalized to simplified 3-task formal set"
+            raise RuntimeError(f"Router returned unsupported task mode in formal run: {route['task_mode']}")
         env_s = routing_context.get("env_summary", {})
         traj_s = routing_context.get("trajectory_summary", {})
         mat = float(env_s.get("material_stock", prev_metrics.get("material_stock_end_mean", 1.0) if previous_best else 1.0))
@@ -682,6 +664,8 @@ def main() -> None:
         violation = float(traj_s.get("constraint_violation_rate", 0.0))
         mean_prog = float(traj_s.get("mean_progress_delta", 0.0))
         if round_idx > 0:
+            prev_success = float(prev_metrics.get("success_rate", 0.0))
+            prev_progress = float(prev_metrics.get("mean_progress_delta_eval", prev_metrics.get("mean_progress_delta", 0.0)))
             layer_gap = max(comm, float(env_s.get("power_recovery_ratio", 0.0)), road) - min(
                 comm, float(env_s.get("power_recovery_ratio", 0.0)), road
             )
@@ -701,6 +685,27 @@ def main() -> None:
                 route["task_mode"] = "critical_load_priority"
                 route["override_applied"] = True
                 route["override_reason"] = "Round reroute: critical shortfall remains dominant bottleneck."
+            elif route["task_mode"] == previous_task and mean_prog < 0.008:
+                switch_map = {
+                    "critical_load_priority": "restoration_capability_priority",
+                    "restoration_capability_priority": "global_efficiency_priority",
+                    "global_efficiency_priority": "critical_load_priority",
+                }
+                route["final_task_mode"] = switch_map.get(previous_task, "global_efficiency_priority")
+                route["task_mode"] = route["final_task_mode"]
+                route["override_applied"] = True
+                route["override_reason"] = "Round reroute: previous task underperformed on progress; force meaningful task switch."
+            if route["task_mode"] == previous_task and (prev_success <= 0.0 or prev_progress < 0.01):
+                switch_map = {
+                    "critical_load_priority": "restoration_capability_priority",
+                    "restoration_capability_priority": "global_efficiency_priority",
+                    "global_efficiency_priority": "critical_load_priority",
+                }
+                route["final_task_mode"] = switch_map.get(previous_task, "global_efficiency_priority")
+                route["task_mode"] = route["final_task_mode"]
+                route["override_applied"] = True
+                route["override_reason"] = "Round reroute: enforce round-2 task switch after underperforming round-1 outcomes."
+        route["task_switched_vs_prev_round"] = bool(round_idx > 0 and route.get("task_mode") != previous_task)
 
         round_dir = run_dir / f"round_{round_idx+1}"
         round_dir.mkdir(parents=True, exist_ok=True)
@@ -774,11 +779,6 @@ def main() -> None:
                         continue
                     raise RuntimeError(f"Codegen call failed for {cid} under formal real LLM mode: {exc}") from exc
                 parsed, repaired = parse_json_with_repair(raw)
-                if not parsed:
-                    recovered = recover_candidate_payload_from_raw(raw, task_mode=route["task_mode"], stage=route["stage"])
-                    if recovered:
-                        parsed = recovered
-                        repaired = True
                 if not parsed and attempt == 3:
                     raise RuntimeError(f"Codegen JSON parse failed for {cid} under formal real LLM mode.")
                 report = validate_candidate_payload(
@@ -829,6 +829,7 @@ def main() -> None:
                 metrics["selected_task"] = route.get("final_task_mode", route.get("task_mode"))
                 metrics["llm_effective_mode"] = client.effective_mode()
                 metrics["router_mode"] = args.router_mode
+                metrics["wait_hold_usage_eval"] = float(metrics.get("wait_hold_usage_eval", metrics.get("wait_hold_usage", 0.0)))
                 record["metrics"] = metrics
                 record["candidate_path"] = str(candidate_path)
                 record["task_mode"] = route["task_mode"]
@@ -891,6 +892,7 @@ def main() -> None:
             "final_task_mode": route.get("final_task_mode", route.get("task_mode")),
             "override_applied": bool(route.get("override_applied", False)),
             "override_reason": str(route.get("override_reason", "")),
+            "task_switched_vs_prev_round": bool(route.get("task_switched_vs_prev_round", False)),
             "selection_diagnostics": selection_diagnostics,
             "llm_feedback": feedback_json,
             "llm_effective_mode": client.effective_mode(),
@@ -916,7 +918,20 @@ def main() -> None:
         "codegen_model": client.chat_model,
         "feedback_model": client.reasoner_model,
         "real_llm_call_count": client.call_count,
+        "no_mock_fallback": True,
+        "no_codegen_baseline_fallback": True,
+        "hard_fail_on_llm_error": True,
     }
+    kind_counts: dict[str, int] = {}
+    success_counts: dict[str, int] = {}
+    for call in client.call_history:
+        kind = str(call.get("response_kind", "unknown"))
+        kind_counts[kind] = kind_counts.get(kind, 0) + 1
+        if bool(call.get("success", False)):
+            success_counts[kind] = success_counts.get(kind, 0) + 1
+    llm_audit["call_counts_by_kind"] = kind_counts
+    llm_audit["successful_call_counts_by_kind"] = success_counts
+    llm_audit["required_stages_present"] = all(k in kind_counts for k in ("router", "planning", "codegen", "feedback"))
     (run_dir / "llm_call_log.json").write_text(json.dumps(client.call_history, indent=2), encoding="utf-8")
     final_selection_diag = history[-1].get("selection_diagnostics", {}) if history else {}
     (run_dir / "outer_loop_final_summary.json").write_text(

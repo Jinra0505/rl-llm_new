@@ -128,8 +128,6 @@ class LLMClient:
         return base if base.endswith("/v1") else f"{base}/v1"
 
     def _select_model(self, response_kind: str) -> str:
-        if response_kind in {"router", "feedback"}:
-            return self.reasoner_model or self.chat_model
         return self.chat_model
 
     def _max_tokens_for_kind(self, response_kind: str) -> int:
@@ -178,44 +176,39 @@ class LLMClient:
 
         client = OpenAI(api_key=self.api_key, base_url=self._normalize_base_url(), timeout=self.timeout_seconds, max_retries=0)
         preferred_model = self._select_model(response_kind=response_kind)
-        model_candidates = [preferred_model]
-        if self.chat_model and self.chat_model != preferred_model:
-            model_candidates.append(self.chat_model)
-        if self.reasoner_model and self.reasoner_model not in model_candidates:
-            model_candidates.append(self.reasoner_model)
 
         last_exc: Exception | None = None
-        for model in model_candidates:
-            for attempt in range(self.max_retries + 1):
-                t0 = time.time()
-                try:
-                    resp = client.chat.completions.create(
-                        model=model,
-                        messages=messages,
-                        temperature=self._temperature_for_kind(response_kind),
-                        max_tokens=self._max_tokens_for_kind(response_kind),
-                    )
-                    content = resp.choices[0].message.content or ""
-                    if not content.strip():
-                        raise RuntimeError(f"Empty content from LLM for response_kind={response_kind}, model={model}")
-                    self._record_call(
-                        response_kind=response_kind,
-                        model=model,
-                        success=True,
-                        latency_sec=time.time() - t0,
-                        error="",
-                    )
-                    return content
-                except Exception as exc:  # noqa: BLE001
-                    last_exc = exc
-                    err_msg = str(exc)
-                    self._record_call(
-                        response_kind=response_kind,
-                        model=model,
-                        success=False,
-                        latency_sec=time.time() - t0,
-                        error=err_msg,
-                    )
-                    if attempt < self.max_retries:
-                        time.sleep(1.2 * (attempt + 1))
+        model = preferred_model
+        for attempt in range(self.max_retries + 1):
+            t0 = time.time()
+            try:
+                resp = client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=self._temperature_for_kind(response_kind),
+                    max_tokens=self._max_tokens_for_kind(response_kind),
+                )
+                content = resp.choices[0].message.content or ""
+                if not content.strip():
+                    raise RuntimeError(f"Empty content from LLM for response_kind={response_kind}, model={model}")
+                self._record_call(
+                    response_kind=response_kind,
+                    model=model,
+                    success=True,
+                    latency_sec=time.time() - t0,
+                    error="",
+                )
+                return content
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                err_msg = str(exc)
+                self._record_call(
+                    response_kind=response_kind,
+                    model=model,
+                    success=False,
+                    latency_sec=time.time() - t0,
+                    error=err_msg,
+                )
+                if attempt < self.max_retries:
+                    time.sleep(1.2 * (attempt + 1))
         raise RuntimeError(f"DeepSeek API call failed after retries ({response_kind}, model={preferred_model}): {last_exc}")

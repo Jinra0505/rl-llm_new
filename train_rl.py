@@ -253,6 +253,7 @@ def run_training(
         ep_reward = 0.0
         ep_violation_count = 0
         mid_stagnation_steps = 0
+        mid_wait_streak = 0
 
         for step in range(max_steps_per_episode):
             rs = _effective_state(_call_revise(revise_state_fn, s, info), max_revised_dim)
@@ -317,7 +318,17 @@ def run_training(
                 mid_stagnation_steps += 1
             else:
                 mid_stagnation_steps = 0
-            middle_stagnation_penalty = 0.16 if mid_stagnation_steps >= 8 else 0.0
+            if a == 14 and str(info.get("stage", "middle")) == "middle":
+                mid_wait_streak += 1
+            else:
+                mid_wait_streak = 0
+            feasible_non_wait_exists = np.any(valid_mask[:14]) if action_dim > 14 else np.any(valid_mask)
+            repeated_wait_penalty = 0.0
+            if a == 14 and str(info.get("stage", "middle")) == "middle" and feasible_non_wait_exists:
+                repeated_wait_penalty = 0.16 + 0.08 * max(0, mid_wait_streak - 1)
+            middle_stagnation_penalty = 0.18 if mid_stagnation_steps >= 6 else 0.0
+            severe_mid_stagnation_penalty = 0.28 if mid_stagnation_steps >= 12 else 0.0
+            sustainable_progress_bonus = 0.10 if (progress_bonus > 0.010 and material_now > 0.12) else 0.0
             r = float(
                 ext_r
                 + ir
@@ -332,6 +343,7 @@ def run_training(
                 + weakest_close_bonus
                 + low_violation_finish_bonus
                 + material_buffer_bonus
+                + sustainable_progress_bonus
                 - invalid_penalty
                 - constraint_penalty
                 - coordinated_late_penalty
@@ -339,7 +351,9 @@ def run_training(
                 - material_zero_penalty
                 - critical_low_material_penalty
                 - middle_stagnation_penalty
+                - severe_mid_stagnation_penalty
                 - wait_misuse_penalty
+                - repeated_wait_penalty
             )
             done = bool(terminated or truncated)
 
@@ -414,6 +428,10 @@ def run_training(
     eval_steps_per_episode: list[int] = []
     eval_terminated_count = 0
     eval_truncated_count = 0
+    eval_total_steps = 0
+    eval_total_invalid_count = 0
+    eval_total_violation_count = 0
+    eval_total_wait_count = 0
     eval_action_usage = {str(i): 0 for i in range(action_dim)}
     eval_stage_counts: Counter[str] = Counter()
     eval_invalid_reason_counts: Counter[str] = Counter()
@@ -452,6 +470,8 @@ def run_training(
                 qarr[~valid_mask] = -1e9
                 a = int(np.argmax(qarr))
             eval_action_usage[str(a)] += 1
+            if a == 14:
+                eval_total_wait_count += 1
             ns, ext_r, terminated, truncated, info = env.step(a)
             total += float(ext_r)
             ep_steps += 1
@@ -490,6 +510,9 @@ def run_training(
 
         eval_rewards.append(total)
         eval_steps_per_episode.append(ep_steps)
+        eval_total_steps += ep_steps
+        eval_total_invalid_count += ep_invalid
+        eval_total_violation_count += ep_violate
         eval_terminated_count += int(bool(terminated))
         eval_truncated_count += int(bool(truncated))
         comm_scores.append(float(info.get("communication_recovery_ratio", 0.0)))
@@ -548,6 +571,10 @@ def run_training(
         float(np.mean(crit_scores)) if crit_scores else 0.0,
     )
 
+    eval_violation_rate = float(eval_total_violation_count) / float(max(1, eval_total_steps))
+    eval_invalid_rate = float(eval_total_invalid_count) / float(max(1, eval_total_steps))
+    eval_wait_rate = float(eval_total_wait_count) / float(max(1, eval_total_steps))
+
     result = {
         "episode_rewards": episode_rewards,
         "eval_rewards": eval_rewards,
@@ -562,12 +589,17 @@ def run_training(
         "critical_load_shortfall": float(max(0.0, 1.0 - (float(np.mean(crit_scores)) if crit_scores else 0.0))),
         "recovery_completion_time": float(np.mean(completion_steps)) if completion_steps else float(max_steps_per_episode),
         "cumulative_reward_mean": float(np.mean(episode_rewards)) if episode_rewards else 0.0,
-        "constraint_violation_count": int(violations),
-        "constraint_violation_rate": float(np.mean(eval_violation_rates)) if eval_violation_rates else 0.0,
-        "constraint_violation_rate_eval": float(np.mean(eval_violation_rates)) if eval_violation_rates else 0.0,
+        "constraint_violation_count": int(eval_total_violation_count),
+        "constraint_violation_rate": eval_violation_rate,
+        "constraint_violation_rate_eval": eval_violation_rate,
+        "train_constraint_violation_count": int(violations),
         "train_constraint_violation_rate": float(violations) / float(max(1, train_total_steps)),
-        "invalid_action_rate": float(np.mean(eval_invalid_rates)) if eval_invalid_rates else 0.0,
-        "invalid_action_rate_eval": float(np.mean(eval_invalid_rates)) if eval_invalid_rates else 0.0,
+        "invalid_action_count_eval": int(eval_total_invalid_count),
+        "invalid_action_rate": eval_invalid_rate,
+        "invalid_action_rate_eval": eval_invalid_rate,
+        "wait_hold_count_eval": int(eval_total_wait_count),
+        "wait_hold_usage_eval": eval_wait_rate,
+        "wait_hold_usage": eval_wait_rate,
         "mean_progress_delta_eval": float(np.mean(eval_progress_deltas)) if eval_progress_deltas else 0.0,
         "mean_progress_delta": float(np.mean(eval_progress_deltas)) if eval_progress_deltas else 0.0,
         "mean_stage_indicator_eval": float(np.mean(eval_stage_indicators)) if eval_stage_indicators else 0.0,
@@ -639,6 +671,18 @@ def run_training(
     weights_cfg = task_mode_metric_weights or {}
     result["selection_score"] = _selection_score(result, weights_cfg=weights_cfg)
     result["selection_metric_used"] = "global_objective_score"
+
+    # Internal consistency guard for eval count/rate metrics.
+    if eval_total_steps > 0:
+        expected_violation_rate = float(result["constraint_violation_count"]) / float(eval_total_steps)
+        expected_invalid_rate = float(result["invalid_action_count_eval"]) / float(eval_total_steps)
+        if abs(expected_violation_rate - float(result["constraint_violation_rate_eval"])) > 1e-9:
+            raise RuntimeError("Metrics consistency error: constraint_violation_count vs constraint_violation_rate_eval mismatch.")
+        if abs(expected_invalid_rate - float(result["invalid_action_rate_eval"])) > 1e-9:
+            raise RuntimeError("Metrics consistency error: invalid_action_count_eval vs invalid_action_rate_eval mismatch.")
+        expected_wait_rate = float(result["wait_hold_count_eval"]) / float(eval_total_steps)
+        if abs(expected_wait_rate - float(result["wait_hold_usage_eval"])) > 1e-9:
+            raise RuntimeError("Metrics consistency error: wait_hold_count_eval vs wait_hold_usage_eval mismatch.")
 
     output_json_path.parent.mkdir(parents=True, exist_ok=True)
     output_json_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
