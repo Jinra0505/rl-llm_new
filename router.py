@@ -8,11 +8,9 @@ from llm_client import LLMClient
 
 
 TASKS = [
-    "road_opening_priority",
-    "critical_power_priority",
-    "backbone_comm_priority",
-    "coordinated_restoration",
-    "stabilization_priority",
+    "critical_load_priority",
+    "restoration_capability_priority",
+    "global_efficiency_priority",
 ]
 
 
@@ -42,28 +40,49 @@ def route_rule(routing_context: dict[str, Any]) -> dict[str, Any]:
     road = float(env.get("road_recovery_ratio", 0.0))
     shortfall = float(env.get("critical_load_shortfall", 1.0))
     backbone_comm = float(env.get("backbone_comm_ratio", comm))
+    material = float(env.get("material_stock", 1.0))
     weakest_zone = str(env.get("weakest_zone", "A"))
     weakest_layer_idx = str(env.get("weakest_layer", "0"))
 
-    if traj.get("constraint_violation_rate", 0.0) > 0.25:
-        return {"task_mode": "stabilization_priority", "confidence": 0.86, "reason": "Frequent violations observed.", "stage": "late"}
+    if traj.get("constraint_violation_rate", 0.0) > 0.28:
+        return {
+            "task_mode": "restoration_capability_priority",
+            "confidence": 0.84,
+            "reason": "Frequent violations observed; prioritize capability restoration and safer actions.",
+            "stage": "late",
+        }
 
     avg = (comm + power + road) / 3.0
     stage = "early" if avg < 0.35 else "middle" if avg < 0.75 else "late"
 
-    if stage == "early" and road < min(comm, power):
-        return {"task_mode": "road_opening_priority", "confidence": 0.82, "reason": f"Road is weakest in early stage (zone {weakest_zone}).", "stage": stage}
+    if shortfall > 0.30 or weakest_layer_idx == "0":
+        return {
+            "task_mode": "critical_load_priority",
+            "confidence": 0.87,
+            "reason": "Critical-load shortfall/high power weakness dominates.",
+            "stage": stage,
+        }
 
-    if shortfall > 0.35 or weakest_layer_idx == "0":
-        return {"task_mode": "critical_power_priority", "confidence": 0.84, "reason": "Critical-load shortfall/high power weakness.", "stage": stage}
-
+    if stage == "early" and (road < min(comm, power) or material < 0.35):
+        return {
+            "task_mode": "restoration_capability_priority",
+            "confidence": 0.81,
+            "reason": f"Early-stage bottlenecks in road/resources around zone {weakest_zone}.",
+            "stage": stage,
+        }
     if weakest_layer_idx == "1" and min(comm, backbone_comm) < 0.65:
-        return {"task_mode": "backbone_comm_priority", "confidence": 0.8, "reason": "Communication layer is weakest.", "stage": stage}
-
-    if stage == "middle":
-        return {"task_mode": "coordinated_restoration", "confidence": 0.8, "reason": "Middle stage favors coordinated zonal restoration.", "stage": stage}
-
-    return {"task_mode": "stabilization_priority", "confidence": 0.78, "reason": "Late stage stabilization and constraint reduction.", "stage": stage}
+        return {
+            "task_mode": "restoration_capability_priority",
+            "confidence": 0.8,
+            "reason": "Communication capability is limiting dispatch/coordination.",
+            "stage": stage,
+        }
+    return {
+        "task_mode": "global_efficiency_priority",
+        "confidence": 0.79,
+        "reason": "Balanced multi-layer optimization is currently preferred.",
+        "stage": stage,
+    }
 
 
 def route_llm(client: LLMClient, system_prompt: str, router_prompt: str, routing_context: dict[str, Any]) -> dict[str, Any]:
