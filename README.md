@@ -1,48 +1,50 @@
 # Three-Task Recovery Recognition Framework
 
-This repository is a clean, minimal project for **three-task situation recognition** in a coupled recovery environment.
+This repository is a clean project centered on **three-task situation recognition** for a coupled recovery scenario.
 
-## Project purpose
-Primary goal:
-1. Recognize a recovery scenario into exactly one task:
-   - `critical_load_priority`
-   - `restoration_capability_priority`
-   - `global_efficiency_priority`
-
-Secondary optional goal:
-2. Use the recognized task to drive LLM-generated shaping functions (`revise_state`, `intrinsic_reward`) and DQN training.
-
-## Task set (fixed)
-Only these three tasks are used in this project:
+## Main purpose (primary)
+Recognize each scenario into exactly one task:
 - `critical_load_priority`
 - `restoration_capability_priority`
 - `global_efficiency_priority`
 
-## Core files
-- `task_recognition_prompt.py`: builds task-classification prompts from scenario context.
-- `task_recognizer.py`: recognizes scenario -> one of the three tasks (rule + LLM).
-- `mock_recovery_env.py`: coupled tri-layer recovery environment.
-- `run_outer_loop.py`: optional full pipeline (recognition -> planning/codegen -> RL evaluation).
-- `train_rl.py`: DQN training/evaluation on the recovery environment.
-- `llm_client.py`: strict real-LLM client for formal runs.
-- `prompts.py`: planning/codegen/feedback prompts.
-- `config.yaml`: project configuration.
-- `baseline_noop.py`: baseline shaping module.
+## Optional downstream (secondary)
+After recognition, you may optionally run:
+1. LLM function generation (`revise_state` + `intrinsic_reward`)
+2. DQN training/evaluation in the recovery environment
+
+## Important design rule
+**Task override logic is removed.**
+The recognized task comes directly from task recognition output (rule mode or LLM classification output) and is not post-corrected by forced engineering overrides.
+
+## Project structure
+- `task_recognition_prompt.py`: builds recognition prompt from scenario summary.
+- `task_recognizer.py`: three-task recognizer (rule + LLM).
+- `run_task_recognition.py`: standalone recognition-only entrypoint.
+- `mock_recovery_env.py`: coupled recovery environment.
+- `run_outer_loop.py`: optional downstream full pipeline.
+- `train_rl.py`: optional downstream DQN training module.
+- `llm_client.py`: strict real-LLM client.
+- `prompts.py`, `router.py`, `baseline_noop.py`, `config.yaml`.
 
 ## Run: task recognition only
-Use this command to classify a scenario context into one of the three tasks:
-
+### Rule-based recognition
 ```bash
-python -c "from task_recognizer import ScenarioTaskRecognizer; rc={'env_summary':{'communication_recovery_ratio':0.45,'power_recovery_ratio':0.62,'road_recovery_ratio':0.40,'critical_load_shortfall':0.38,'material_stock':0.22},'trajectory_summary':{'mean_progress_delta':0.002,'constraint_violation_rate':0.03,'action_category_distribution':{'wait':0.35}}}; print(ScenarioTaskRecognizer().recognize_rule(rc))"
+python run_task_recognition.py --mode rule
 ```
 
-## Run: optional full pipeline
-Formal end-to-end run (recognition + LLM function generation + DQN training):
+### LLM-based recognition
+```bash
+python run_task_recognition.py --mode llm --llm-mode real
+```
 
+(Optionally pass `--input-json path/to/context.json` where JSON includes `env_summary` and `trajectory_summary`.)
+
+## Run: optional downstream pipeline
 ```bash
 python run_outer_loop.py --env project_recovery --llm-mode real --router-mode llm --reroute-each-round --config config.yaml
 ```
 
 ## Notes
-- RL is intentionally secondary in this repository story.
-- The repo is cleaned to focus on recognition-first workflow for your own three-task framework.
+- Repository is intentionally minimal and recognition-first.
+- Old run artifacts are removed from versioned files to keep the repo clean.

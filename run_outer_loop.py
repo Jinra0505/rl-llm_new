@@ -655,56 +655,6 @@ def main() -> None:
             raise
         if route["task_mode"] not in TASK_MODE_ALLOWED:
             raise RuntimeError(f"Router returned unsupported task mode in formal run: {route['task_mode']}")
-        env_s = routing_context.get("env_summary", {})
-        traj_s = routing_context.get("trajectory_summary", {})
-        mat = float(env_s.get("material_stock", prev_metrics.get("material_stock_end_mean", 1.0) if previous_best else 1.0))
-        comm = float(env_s.get("communication_recovery_ratio", 0.0))
-        road = float(env_s.get("road_recovery_ratio", 0.0))
-        shortfall = float(env_s.get("critical_load_shortfall", 1.0))
-        violation = float(traj_s.get("constraint_violation_rate", 0.0))
-        mean_prog = float(traj_s.get("mean_progress_delta", 0.0))
-        if round_idx > 0:
-            prev_success = float(prev_metrics.get("success_rate", 0.0))
-            prev_progress = float(prev_metrics.get("mean_progress_delta_eval", prev_metrics.get("mean_progress_delta", 0.0)))
-            layer_gap = max(comm, float(env_s.get("power_recovery_ratio", 0.0)), road) - min(
-                comm, float(env_s.get("power_recovery_ratio", 0.0)), road
-            )
-            avg_recovery = (comm + float(env_s.get("power_recovery_ratio", 0.0)) + road) / 3.0
-            if mat < 0.16 or violation > 0.18 or min(comm, road) < 0.55:
-                route["final_task_mode"] = "restoration_capability_priority"
-                route["task_mode"] = "restoration_capability_priority"
-                route["override_applied"] = True
-                route["override_reason"] = "Round reroute: resource/road/comm constraints dominate."
-            elif avg_recovery > 0.52 and layer_gap < 0.18 and shortfall < 0.50:
-                route["final_task_mode"] = "global_efficiency_priority"
-                route["task_mode"] = "global_efficiency_priority"
-                route["override_applied"] = True
-                route["override_reason"] = "Round reroute: recovery is broader and incomplete."
-            elif shortfall > 0.45 and float(env_s.get("power_recovery_ratio", 0.0)) < 0.58:
-                route["final_task_mode"] = "critical_load_priority"
-                route["task_mode"] = "critical_load_priority"
-                route["override_applied"] = True
-                route["override_reason"] = "Round reroute: critical shortfall remains dominant bottleneck."
-            elif route["task_mode"] == previous_task and mean_prog < 0.008:
-                switch_map = {
-                    "critical_load_priority": "restoration_capability_priority",
-                    "restoration_capability_priority": "global_efficiency_priority",
-                    "global_efficiency_priority": "critical_load_priority",
-                }
-                route["final_task_mode"] = switch_map.get(previous_task, "global_efficiency_priority")
-                route["task_mode"] = route["final_task_mode"]
-                route["override_applied"] = True
-                route["override_reason"] = "Round reroute: previous task underperformed on progress; force meaningful task switch."
-            if route["task_mode"] == previous_task and (prev_success <= 0.0 or prev_progress < 0.01):
-                switch_map = {
-                    "critical_load_priority": "restoration_capability_priority",
-                    "restoration_capability_priority": "global_efficiency_priority",
-                    "global_efficiency_priority": "critical_load_priority",
-                }
-                route["final_task_mode"] = switch_map.get(previous_task, "global_efficiency_priority")
-                route["task_mode"] = route["final_task_mode"]
-                route["override_applied"] = True
-                route["override_reason"] = "Round reroute: enforce round-2 task switch after underperforming round-1 outcomes."
         route["task_switched_vs_prev_round"] = bool(round_idx > 0 and route.get("task_mode") != previous_task)
 
         round_dir = run_dir / f"round_{round_idx+1}"
