@@ -133,8 +133,10 @@ class LLMClient:
         return self.chat_model
 
     def _max_tokens_for_kind(self, response_kind: str) -> int:
-        if response_kind in {"router", "planning", "feedback"}:
+        if response_kind in {"router", "feedback"}:
             return int(min(self.max_tokens, 600))
+        if response_kind == "planning":
+            return int(min(self.max_tokens, 1000))
         if response_kind == "codegen":
             return int(min(self.max_tokens, 1400))
         return int(self.max_tokens)

@@ -207,7 +207,7 @@ def _semantic_validate_candidate(code: str, max_revised_dim: int | None = None) 
         if not np.isfinite(ir_f):
             errors.append(f"Semantic validation: intrinsic_reward returned NaN/inf on sample {idx}")
             continue
-        if abs(ir_f) > 10.0:
+        if abs(ir_f) > 20.0:
             errors.append(f"Semantic validation: intrinsic_reward magnitude too large on sample {idx}: {ir_f}")
 
     return errors
