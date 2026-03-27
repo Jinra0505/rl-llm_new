@@ -30,6 +30,7 @@ Prioritize system-level recovery over single-layer gains:
 - do not overuse feeder/coordinated actions when prerequisites are weak (e.g., low mes_soc, low backbone_comm, low material)
 - prioritize low-violation completion in late-stage finishing
 Only output code with revise_state and intrinsic_reward (no extra dependencies/modules).
+Keep code short and robust (target <= 45 lines).
 Return JSON keys: file_name, rationale, code, expected_behavior.
 """
 

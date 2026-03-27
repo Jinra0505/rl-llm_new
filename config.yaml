@@ -2,8 +2,8 @@ llm:
   base_url: https://api.deepseek.com
   model_chat: deepseek-chat
   model_reasoner: deepseek-reasoner
-  timeout_seconds: 30
-  max_retries: 0
+  timeout_seconds: 60
+  max_retries: 2
   temperature: 0.3
   max_tokens: 1800
 

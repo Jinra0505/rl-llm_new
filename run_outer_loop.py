@@ -686,20 +686,25 @@ def main() -> None:
                 observation_schema=str(cfg["env"]),
                 planning_json=json.dumps(planning_json, indent=2, ensure_ascii=False),
             )
-            prompt += "\n\nReturn compact JSON and keep generated code concise (<= 80 lines)."
+            prompt += "\n\nReturn compact JSON and keep generated code concise (<= 45 lines)."
             if history:
                 prompt += "\n\nLatest feedback:\n" + json.dumps(history[-1].get("feedback_payload", {}), indent=2)
             raw = "{}"
             parsed: dict[str, Any] = {}
             repaired = True
             report: dict[str, Any] = {"valid": False, "errors": ["not attempted"], "normalized_payload": {}}
-            for attempt in range(2):
+            for attempt in range(4):
                 attempt_prompt = prompt
                 if attempt > 0:
                     attempt_prompt += (
                         "\n\nPrevious output was invalid. Respond with ONLY one JSON object with keys: "
                         "file_name, rationale, code, expected_behavior."
                     )
+                    attempt_prompt += (
+                        "\nThe 'code' field must be a valid Python source string with escaped newlines, "
+                        "and must parse successfully."
+                    )
+                    attempt_prompt += "\nPrevious validation errors: " + json.dumps(report.get("errors", []), ensure_ascii=False)
                 try:
                     raw = client.chat(
                         [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": attempt_prompt}],
@@ -707,41 +712,17 @@ def main() -> None:
                         sample_idx=sample_idx + round_idx * 10 + attempt,
                     )
                 except Exception as exc:  # noqa: BLE001
-                    if attempt < 1:
+                    if attempt < 3:
                         continue
-                    raw = ""
-                    parsed = {
-                        "file_name": f"fallback_{route['task_mode']}_{route['stage']}.py",
-                        "rationale": f"Codegen call failed under real LLM ({exc}); fallback to baseline_noop-compatible candidate.",
-                        "code": Path("baseline_noop.py").read_text(encoding="utf-8"),
-                        "expected_behavior": "Safety fallback candidate when real LLM codegen call fails.",
-                    }
-                    repaired = True
-                    report = validate_candidate_payload(
-                        parsed,
-                        max_revised_dim=(
-                            int(cfg.get("state_representation", {}).get("max_revised_dim"))
-                            if cfg.get("state_representation", {}).get("max_revised_dim") is not None
-                            else None
-                        ),
-                    )
-                    report["repaired_from_raw"] = True
-                    break
+                    raise RuntimeError(f"Codegen call failed for {cid} under formal real LLM mode: {exc}") from exc
                 parsed, repaired = parse_json_with_repair(raw)
                 if not parsed:
                     recovered = recover_candidate_payload_from_raw(raw, task_mode=route["task_mode"], stage=route["stage"])
                     if recovered:
                         parsed = recovered
                         repaired = True
-                if not parsed and attempt == 1:
-                    baseline_code = Path("baseline_noop.py").read_text(encoding="utf-8")
-                    parsed = {
-                        "file_name": f"fallback_{route['task_mode']}_{route['stage']}.py",
-                        "rationale": "Codegen JSON parse failed; fallback to baseline_noop-compatible candidate for continuity.",
-                        "code": baseline_code,
-                        "expected_behavior": "Safety fallback candidate when real LLM codegen payload is malformed.",
-                    }
-                    repaired = True
+                if not parsed and attempt == 3:
+                    raise RuntimeError(f"Codegen JSON parse failed for {cid} under formal real LLM mode.")
                 report = validate_candidate_payload(
                     parsed,
                     max_revised_dim=(
@@ -755,25 +736,9 @@ def main() -> None:
                     break
 
             if not report["valid"]:
-                fallback_payload = {
-                    "file_name": f"fallback_{route['task_mode']}_{route['stage']}.py",
-                    "rationale": "Fallback to baseline_noop-compatible candidate after invalid codegen output.",
-                    "code": Path("baseline_noop.py").read_text(encoding="utf-8"),
-                    "expected_behavior": "Guaranteed-valid fallback candidate to keep formal run trainable.",
-                }
-                fallback_report = validate_candidate_payload(
-                    fallback_payload,
-                    max_revised_dim=(
-                        int(cfg.get("state_representation", {}).get("max_revised_dim"))
-                        if cfg.get("state_representation", {}).get("max_revised_dim") is not None
-                        else None
-                    ),
+                raise RuntimeError(
+                    f"Candidate {cid} failed validation in formal real LLM mode; errors={report.get('errors', [])}"
                 )
-                fallback_report["repaired_from_raw"] = True
-                if fallback_report["valid"]:
-                    parsed = fallback_payload
-                    report = fallback_report
-                    repaired = True
 
             (cdir / "prompt.txt").write_text(prompt, encoding="utf-8")
             (cdir / "raw_response.txt").write_text(raw, encoding="utf-8")
