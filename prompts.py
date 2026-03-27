@@ -30,18 +30,18 @@ Prioritize system-level recovery over single-layer gains:
 - do not overuse feeder/coordinated actions when prerequisites are weak (e.g., low mes_soc, low backbone_comm, low material)
 - prioritize low-violation completion in late-stage finishing
 Only output code with revise_state and intrinsic_reward (no extra dependencies/modules).
+Keep code short and robust (target <= 45 lines).
 Return JSON keys: file_name, rationale, code, expected_behavior.
 """
 
 ROUTER_PROMPT = """Select one task mode from:
-- road_opening_priority
-- critical_power_priority
-- backbone_comm_priority
-- coordinated_restoration
-- stabilization_priority
+- critical_load_priority
+- restoration_capability_priority
+- global_efficiency_priority
 Use stage, weakest layer, weakest zone, critical-load shortfall, backbone_comm_ratio, and violation rates.
-Do not over-prioritize communication-only gains when critical-load shortfall is high.
-Prefer critical_power_priority or coordinated_restoration when system-level completion is blocked.
+Prefer critical_load_priority when critical-load shortfall is high.
+Prefer restoration_capability_priority when road/communication/resources limit feasible actions.
+Prefer global_efficiency_priority when a balanced multi-layer recovery is needed.
 Return JSON with: task_mode, confidence, reason, stage.
 """
 
