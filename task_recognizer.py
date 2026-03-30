@@ -125,6 +125,8 @@ class ScenarioTaskRecognizer:
             "top2_candidate_tasks": top2,
             "score_margin": round(score_margin, 4),
             "coarse_scores": {k: round(v, 4) for k, v in score_map.items()},
+            "scenario_semantic_cue": str(routing_context.get("semantic_cue", "")),
+            "definition_profile": str(routing_context.get("definition_profile", "default")),
         }
 
     def recognize_rule(self, routing_context: dict[str, Any]) -> dict[str, Any]:
@@ -206,6 +208,7 @@ class ScenarioTaskRecognizer:
         previous_round_failed: bool = False,
         feature_order_mode: str = "stable",
         feature_order_seed: int = 0,
+        definition_profile: str = "default",
     ) -> dict[str, Any]:
         features = self.extract_decision_features(routing_context)
         prompt_features = (
@@ -217,6 +220,7 @@ class ScenarioTaskRecognizer:
             decision_features=prompt_features,
             previous_task=previous_task,
             previous_round_failed=previous_round_failed,
+            definition_profile=definition_profile,
         )
         messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
         first_raw = client.chat_json(messages, response_kind="router")
@@ -264,3 +268,58 @@ class ScenarioTaskRecognizer:
             "second_pass_reason": second_reason,
         }
         return result
+
+    @staticmethod
+    def _is_hybrid_ambiguous(rule_features: dict[str, Any], rule_result: dict[str, Any]) -> bool:
+        margin = float(rule_features.get("score_margin", 1.0))
+        top2 = rule_features.get("top2_candidate_tasks", [])
+        top1 = top2[0] if top2 else ""
+        comp = str(rule_result.get("competing_signal", "")).lower()
+        hints_top2 = any(t.replace("_priority", "").split("_")[0] in comp for t in top2)
+        semantic = bool(str(rule_features.get("scenario_semantic_cue", "")).strip())
+        if margin < 0.06:
+            return True
+        if margin < 0.10 and hints_top2:
+            return True
+        if semantic and margin < 0.14 and str(rule_result.get("task_mode", "")) == top1:
+            return True
+        return False
+
+    def recognize_hybrid(
+        self,
+        client: LLMClient,
+        system_prompt: str,
+        routing_context: dict[str, Any],
+        definition_profile: str = "default",
+    ) -> dict[str, Any]:
+        rule_result = self.recognize_rule(routing_context)
+        features = rule_result.get("features", {})
+        ambiguous = self._is_hybrid_ambiguous(features, rule_result)
+        top2 = features.get("top2_candidate_tasks", [])
+
+        if not ambiguous:
+            return {
+                **rule_result,
+                "source": "hybrid",
+                "hybrid_used_llm": False,
+                "rule_top1": str(rule_result.get("task_mode", "")),
+                "rule_top2": top2,
+                "rule_score_margin": float(features.get("score_margin", 0.0)),
+            }
+
+        llm_result = self.recognize_with_llm(
+            client=client,
+            system_prompt=system_prompt,
+            routing_context=routing_context,
+            definition_profile=definition_profile,
+        )
+        llm_result.update(
+            {
+                "source": "hybrid",
+                "hybrid_used_llm": True,
+                "rule_top1": str(rule_result.get("task_mode", "")),
+                "rule_top2": top2,
+                "rule_score_margin": float(features.get("score_margin", 0.0)),
+            }
+        )
+        return llm_result

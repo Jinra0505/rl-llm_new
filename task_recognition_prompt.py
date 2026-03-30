@@ -14,8 +14,19 @@ def build_task_recognition_prompt(
     decision_features: dict[str, Any],
     previous_task: str = "",
     previous_round_failed: bool = False,
+    definition_profile: str = "default",
 ) -> str:
     """Build strict, feature-first routing prompt."""
+    definition_guidance = ""
+    if definition_profile == "shifted_finish_coordination":
+        definition_guidance = (
+            "Definition-shift guidance:\n"
+            "- global_efficiency_priority emphasizes cross-layer finishing coordination and system-level closeout.\n"
+            "- restoration_capability_priority emphasizes backbone/mobility/material bottlenecks that block feasible actions.\n"
+            "- if numeric scores are close, use scenario_semantic_cue as tie-breaker.\n"
+            "- if scenario_semantic_cue explicitly mentions backbone/mobility/material bottleneck, prefer restoration_capability_priority.\n"
+            "- if scenario_semantic_cue explicitly mentions coordinated closeout/finishing choreography, prefer global_efficiency_priority.\n\n"
+        )
     return (
         "You are a strict tri-task recognizer.\n"
         "Use ONLY the structured feature table below.\n"
@@ -43,6 +54,7 @@ def build_task_recognition_prompt(
         "- clear dominance (score_margin >= 0.12): confidence >= 0.72\n"
         "- moderate boundary (0.06 <= score_margin < 0.12): confidence 0.58~0.72\n"
         "- ambiguous (score_margin < 0.06): confidence <= 0.58\n\n"
+        f"{definition_guidance}"
         f"Previous task: {previous_task or 'none'}\n"
         f"Previous round failed: {str(previous_round_failed).lower()}\n"
         "Structured feature table JSON:\n"

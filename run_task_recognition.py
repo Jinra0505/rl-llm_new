@@ -100,6 +100,9 @@ def build_eval_sets() -> dict[str, list[dict[str, Any]]]:
     paraphrase = build_paraphrase_set()
     shuffled = build_shuffled_feature_order_set()
     conflict_sparse = build_conflict_sparse_set()
+    uncertain = build_uncertain_set()
+    ood_shifted = build_ood_shifted_set()
+    definition_shift = build_definition_shift_set()
     return {
         "internal": internal,
         "independent": independent,
@@ -107,6 +110,9 @@ def build_eval_sets() -> dict[str, list[dict[str, Any]]]:
         "paraphrase": paraphrase,
         "shuffled_feature_order": shuffled,
         "conflict_sparse": conflict_sparse,
+        "uncertain": uncertain,
+        "ood_shifted": ood_shifted,
+        "definition_shift": definition_shift,
     }
 
 
@@ -165,6 +171,176 @@ def build_conflict_sparse_set() -> list[dict[str, Any]]:
     return samples
 
 
+def build_uncertain_set() -> list[dict[str, Any]]:
+    samples: list[dict[str, Any]] = []
+    for i in range(10):
+        # critical vs restoration ambiguous: rely on semantic cue
+        c = {
+            "label": "critical_load_priority",
+            "env_summary": {
+                "communication_recovery_ratio": 0.51 + 0.02 * (i % 2),
+                "power_recovery_ratio": 0.53 + 0.02 * ((i + 1) % 2),
+                "road_recovery_ratio": 0.52 + 0.01 * (i % 3),
+                "critical_load_shortfall": 0.40 + 0.03 * (i % 3),
+                "material_stock": 0.20 + 0.02 * (i % 3),
+            },
+            "trajectory_summary": {
+                "mean_progress_delta": 0.0030 + 0.0004 * (i % 2),
+                "constraint_violation_rate": 0.11 + 0.01 * (i % 3),
+                "action_category_distribution": {"wait": 0.22 + 0.03 * (i % 2)},
+            },
+            "semantic_cue": "despite capability strain, operators state critical-load gap is first-order objective",
+        }
+        samples.append(c)
+        r = dict(c)
+        r["label"] = "restoration_capability_priority"
+        r["semantic_cue"] = "dispatch notes show backbone and material bottleneck must be cleared before load closure"
+        samples.append(r)
+
+        g = {
+            "label": "global_efficiency_priority",
+            "env_summary": {
+                "communication_recovery_ratio": 0.60 + 0.02 * (i % 2),
+                "power_recovery_ratio": 0.60 + 0.02 * ((i + 1) % 2),
+                "road_recovery_ratio": 0.59 + 0.02 * (i % 2),
+                "critical_load_shortfall": 0.28 + 0.03 * (i % 3),
+                "material_stock": 0.23 + 0.02 * (i % 2),
+            },
+            "trajectory_summary": {
+                "mean_progress_delta": 0.0020 + 0.0004 * (i % 3),
+                "constraint_violation_rate": 0.08 + 0.02 * (i % 2),
+                "action_category_distribution": {"wait": 0.32 + 0.03 * (i % 2)},
+            },
+            "semantic_cue": "field command emphasizes cross-layer finishing choreography rather than capability rescue",
+        }
+        samples.append(g)
+    return samples
+
+
+def build_ood_shifted_set() -> list[dict[str, Any]]:
+    samples: list[dict[str, Any]] = []
+    for i in range(10):
+        # non-template mixes; still same task intent
+        samples.append(
+            {
+                "label": "critical_load_priority",
+                "env_summary": {
+                    "communication_recovery_ratio": 0.70 - 0.05 * (i % 2),
+                    "power_recovery_ratio": 0.44 + 0.01 * (i % 3),
+                    "road_recovery_ratio": 0.66 - 0.03 * (i % 2),
+                    "critical_load_shortfall": 0.52 - 0.04 * (i % 3),
+                    "material_stock": 0.33 - 0.04 * (i % 2),
+                },
+                "trajectory_summary": {
+                    "mean_progress_delta": 0.0038 + 0.0005 * (i % 2),
+                    "constraint_violation_rate": 0.06 + 0.02 * (i % 2),
+                    "action_category_distribution": {"wait": 0.20 + 0.04 * (i % 2)},
+                },
+                "semantic_cue": "high comm does not close critical feeders; shortfall is operational blocker",
+            }
+        )
+        samples.append(
+            {
+                "label": "restoration_capability_priority",
+                "env_summary": {
+                    "communication_recovery_ratio": 0.58 + 0.04 * (i % 2),
+                    "power_recovery_ratio": 0.61 + 0.03 * (i % 2),
+                    "road_recovery_ratio": 0.43 + 0.02 * (i % 3),
+                    "critical_load_shortfall": 0.27 + 0.04 * (i % 2),
+                    "material_stock": 0.11 + 0.03 * (i % 3),
+                },
+                "trajectory_summary": {
+                    "mean_progress_delta": 0.0025 + 0.0004 * (i % 2),
+                    "constraint_violation_rate": 0.19 + 0.03 * (i % 2),
+                    "action_category_distribution": {"wait": 0.19 + 0.03 * (i % 2)},
+                },
+                "semantic_cue": "mobility corridor and backbone patching are the limiting factors",
+            }
+        )
+        samples.append(
+            {
+                "label": "global_efficiency_priority",
+                "env_summary": {
+                    "communication_recovery_ratio": 0.68 + 0.03 * (i % 2),
+                    "power_recovery_ratio": 0.70 + 0.02 * (i % 2),
+                    "road_recovery_ratio": 0.66 + 0.02 * (i % 2),
+                    "critical_load_shortfall": 0.21 + 0.03 * (i % 2),
+                    "material_stock": 0.29 + 0.02 * (i % 2),
+                },
+                "trajectory_summary": {
+                    "mean_progress_delta": 0.0018 + 0.0004 * (i % 2),
+                    "constraint_violation_rate": 0.06 + 0.01 * (i % 2),
+                    "action_category_distribution": {"wait": 0.40 + 0.05 * (i % 2)},
+                },
+                "semantic_cue": "capability baseline is sufficient; issue is cross-layer finish orchestration",
+            }
+        )
+    return samples
+
+
+def build_definition_shift_set() -> list[dict[str, Any]]:
+    samples: list[dict[str, Any]] = []
+    for i in range(10):
+        samples.append(
+            {
+                "label": "critical_load_priority",
+                "definition_profile": "shifted_finish_coordination",
+                "env_summary": {
+                    "communication_recovery_ratio": 0.58 + 0.01 * (i % 2),
+                    "power_recovery_ratio": 0.51 + 0.02 * (i % 2),
+                    "road_recovery_ratio": 0.57 + 0.01 * (i % 2),
+                    "critical_load_shortfall": 0.47 + 0.03 * (i % 2),
+                    "material_stock": 0.27 + 0.02 * (i % 2),
+                },
+                "trajectory_summary": {
+                    "mean_progress_delta": 0.0031 + 0.0003 * (i % 2),
+                    "constraint_violation_rate": 0.09 + 0.01 * (i % 2),
+                    "action_category_distribution": {"wait": 0.24 + 0.02 * (i % 2)},
+                },
+                "semantic_cue": "definition-shift note: prioritize unresolved critical service obligations first",
+            }
+        )
+        samples.append(
+            {
+                "label": "restoration_capability_priority",
+                "definition_profile": "shifted_finish_coordination",
+                "env_summary": {
+                    "communication_recovery_ratio": 0.58 + 0.02 * (i % 2),
+                    "power_recovery_ratio": 0.60 + 0.02 * (i % 2),
+                    "road_recovery_ratio": 0.53 + 0.02 * (i % 2),
+                    "critical_load_shortfall": 0.24 + 0.03 * (i % 2),
+                    "material_stock": 0.12 + 0.02 * (i % 2),
+                },
+                "trajectory_summary": {
+                    "mean_progress_delta": 0.0022 + 0.0003 * (i % 2),
+                    "constraint_violation_rate": 0.16 + 0.02 * (i % 2),
+                    "action_category_distribution": {"wait": 0.28 + 0.02 * (i % 2)},
+                },
+                "semantic_cue": "definition-shift note: backbone mobility/material bottleneck is explicit priority",
+            }
+        )
+        samples.append(
+            {
+                "label": "global_efficiency_priority",
+                "definition_profile": "shifted_finish_coordination",
+                "env_summary": {
+                    "communication_recovery_ratio": 0.67 + 0.02 * (i % 2),
+                    "power_recovery_ratio": 0.68 + 0.02 * (i % 2),
+                    "road_recovery_ratio": 0.66 + 0.02 * (i % 2),
+                    "critical_load_shortfall": 0.24 + 0.03 * (i % 2),
+                    "material_stock": 0.28 + 0.02 * (i % 2),
+                },
+                "trajectory_summary": {
+                    "mean_progress_delta": 0.0019 + 0.0003 * (i % 2),
+                    "constraint_violation_rate": 0.06 + 0.01 * (i % 2),
+                    "action_category_distribution": {"wait": 0.42 + 0.02 * (i % 2)},
+                },
+                "semantic_cue": "definition-shift note: emphasize coordinated cross-layer closeout and finish quality",
+            }
+        )
+    return samples
+
+
 def _macro_f1(y_true: list[str], y_pred: list[str]) -> float:
     out = []
     for c in TASKS:
@@ -200,10 +376,26 @@ def eval_set(samples: list[dict[str, Any]], mode: str, recognizer: ScenarioTaskR
     y_true = [str(s["label"]) for s in samples]
     y_pred: list[str] = []
     second_pass_used = 0
+    hybrid_used_llm = 0
     for s in samples:
-        ctx = {"env_summary": s["env_summary"], "trajectory_summary": s["trajectory_summary"]}
+        ctx = {
+            "env_summary": s["env_summary"],
+            "trajectory_summary": s["trajectory_summary"],
+            "semantic_cue": s.get("semantic_cue", ""),
+            "definition_profile": s.get("definition_profile", "default"),
+        }
         if mode == "rule":
             r = recognizer.recognize_rule(ctx)
+        elif mode == "hybrid":
+            if client is None:
+                raise RuntimeError("Hybrid mode requires initialized client")
+            r = recognizer.recognize_hybrid(
+                client=client,
+                system_prompt=SYSTEM_PROMPT,
+                routing_context=ctx,
+                definition_profile=str(s.get("definition_profile", "default")),
+            )
+            hybrid_used_llm += int(bool(r.get("hybrid_used_llm", False)))
         else:
             if client is None:
                 raise RuntimeError("LLM mode requires initialized client")
@@ -213,6 +405,7 @@ def eval_set(samples: list[dict[str, Any]], mode: str, recognizer: ScenarioTaskR
                 routing_context=ctx,
                 feature_order_mode=str(s.get("feature_order_mode", "stable")),
                 feature_order_seed=int(s.get("feature_order_seed", 0)),
+                definition_profile=str(s.get("definition_profile", "default")),
             )
             second_pass_used += int(bool(r.get("second_pass_used", False)))
         y_pred.append(str(r["task_mode"]))
@@ -236,6 +429,8 @@ def eval_set(samples: list[dict[str, Any]], mode: str, recognizer: ScenarioTaskR
         "restoration_to_critical_errors": rest_to_critical,
         "restoration_global_confusions": rest_global_confusion,
         "second_pass_used": second_pass_used,
+        "hybrid_used_llm_count": hybrid_used_llm,
+        "hybrid_used_llm_ratio": (hybrid_used_llm / float(len(y_true))) if y_true else 0.0,
     }
 
 
@@ -244,7 +439,18 @@ def main() -> None:
     parser.add_argument("--mode", choices=["rule", "llm", "eval"], default="rule")
     parser.add_argument(
         "--eval-set",
-        choices=["internal", "independent", "hard", "paraphrase", "shuffled_feature_order", "conflict_sparse", "all"],
+        choices=[
+            "internal",
+            "independent",
+            "hard",
+            "paraphrase",
+            "shuffled_feature_order",
+            "conflict_sparse",
+            "uncertain",
+            "ood_shifted",
+            "definition_shift",
+            "all",
+        ],
         default="all",
     )
     parser.add_argument("--input-json", default="", help="Path to a JSON file with env_summary and trajectory_summary.")
@@ -274,7 +480,14 @@ def main() -> None:
         target_sets = sets.keys() if args.eval_set == "all" else [args.eval_set]
         client = LLMClient(mode=args.llm_mode)
         client.preflight_check()
-        result = {s: {"rule": eval_set(sets[s], "rule", recognizer), "llm": eval_set(sets[s], "llm", recognizer, client)} for s in target_sets}
+        result = {
+            s: {
+                "rule": eval_set(sets[s], "rule", recognizer),
+                "llm": eval_set(sets[s], "llm", recognizer, client),
+                "hybrid": eval_set(sets[s], "hybrid", recognizer, client),
+            }
+            for s in target_sets
+        }
         print(json.dumps(result, indent=2, ensure_ascii=False))
 
     if args.output_json:
