@@ -196,6 +196,8 @@ def run_training(
     task_mode_metric_weights: dict[str, Any] | None = None,
     dqn_cfg: dict[str, Any] | None = None,
     severity: str = "moderate",
+    intrinsic_mode: str = "full",
+    intrinsic_scale: float = 1.0,
 ) -> dict[str, Any]:
     if str(llm_mode).lower() != "real":
         raise RuntimeError(f"Formal run requires llm_mode=real, got: {llm_mode}")
@@ -206,8 +208,11 @@ def run_training(
     np.random.seed(seed)
     torch.manual_seed(seed)
 
-    revise_module_path = revise_module_path or Path("baseline_noop.py")
-    revise_state_fn, intrinsic_reward_fn = load_revise_functions(revise_module_path)
+    if revise_module_path and revise_module_path.exists():
+        revise_state_fn, intrinsic_reward_fn = load_revise_functions(revise_module_path)
+    else:
+        revise_state_fn = lambda state, info=None: np.asarray(state, dtype=np.float32)
+        intrinsic_reward_fn = lambda state, action, next_state, info=None, revised_state=None: 0.0
 
     env = ProjectRecoveryEnv(max_steps=max_steps_per_episode, seed=seed, severity=severity)
     action_dim = int(env.action_space.n)
@@ -329,9 +334,13 @@ def run_training(
             middle_stagnation_penalty = 0.18 if mid_stagnation_steps >= 6 else 0.0
             severe_mid_stagnation_penalty = 0.28 if mid_stagnation_steps >= 12 else 0.0
             sustainable_progress_bonus = 0.10 if (progress_bonus > 0.010 and material_now > 0.12) else 0.0
+            if intrinsic_mode in {"off", "state_only"}:
+                effective_ir = 0.0
+            else:
+                effective_ir = float(intrinsic_scale) * float(ir)
             r = float(
                 ext_r
-                + ir
+                + effective_ir
                 + 0.25 * critical_gain
                 + 0.32 * progress_bonus
                 + 0.20 * weak_layer_gain

@@ -31,6 +31,9 @@ Prioritize system-level recovery over single-layer gains:
 - do not overuse feeder/coordinated actions when prerequisites are weak (e.g., low mes_soc, low backbone_comm, low material)
 - prioritize low-violation completion in late-stage finishing
 - include explicit signals to reach late stage and complete restoration
+- intrinsic reward should be small, dense, and progress-oriented
+- do not duplicate invalid-action / constraint / wait penalties already handled elsewhere
+- do not reward conservative inaction
 Only output code with revise_state and intrinsic_reward (no extra dependencies/modules).
 Keep code short and robust (target <= 45 lines).
 Return JSON keys: file_name, rationale, code, expected_behavior.
@@ -69,18 +72,23 @@ Planning constraints:
 - include resource-preservation strategy to keep enough material for late-stage completion
 - include explicit anti-wait-overuse rule: wait_hold should be safety-only, not dominant when feasible recovery actions exist
 - include explicit round-specific task-switch rationale tied to prior-round failure patterns
+- intrinsic shaping should be small, dense, and progress-oriented
+- do not duplicate invalid-action / constraint / wait penalties already handled elsewhere
+- do not reward conservative inaction
 Return JSON only.
 """
 
-FEEDBACK_PROMPT = """Given candidate metrics, return JSON with:
-- improvement_focus
-- keep_signals
-- avoid_patterns
-- finish_strategy_adjustments
-Focus feedback on:
-- late-stage entry and completion
-- avoiding middle-stage stagnation with tiny progress
-- sustainable resource usage (material/SOC) for finishing
-- avoiding repeated wait_hold in middle stage when feasible alternatives exist
-- enforcing meaningful task switching in round 2 when round 1 underperforms
+FEEDBACK_PROMPT = """Return JSON only. No markdown. No code fences. No extra text before or after JSON.
+Output schema (fixed keys only):
+{
+  "improvement_focus": ["short phrase", "..."],
+  "keep_signals": ["short phrase", "..."],
+  "avoid_patterns": ["short phrase", "..."],
+  "finish_strategy_adjustments": ["short phrase", "..."],
+  "confidence": 0.0
+}
+Rules:
+- Keep each list concise (0-4 items, short phrases only).
+- Confidence must be a float in [0, 1].
+- Keep output brief and operational, avoid long explanations.
 """

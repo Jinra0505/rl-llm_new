@@ -77,6 +77,9 @@ class LLMClient:
         success: bool,
         latency_sec: float,
         error: str = "",
+        finish_reason: str = "",
+        content_len: int = 0,
+        reasoning_content_len: int = 0,
     ) -> None:
         self.call_history.append(
             {
@@ -86,6 +89,9 @@ class LLMClient:
                 "success": bool(success),
                 "latency_sec": float(latency_sec),
                 "error": error,
+                "finish_reason": finish_reason,
+                "content_len": int(content_len),
+                "reasoning_content_len": int(reasoning_content_len),
             }
         )
         self.call_count += 1
@@ -128,19 +134,29 @@ class LLMClient:
         return base if base.endswith("/v1") else f"{base}/v1"
 
     def _select_model(self, response_kind: str) -> str:
+        if response_kind in {"planning", "feedback"}:
+            return self.reasoner_model
+        if response_kind in {"router", "chat", "codegen"}:
+            return self.chat_model
         return self.chat_model
 
     def _max_tokens_for_kind(self, response_kind: str) -> int:
-        if response_kind in {"router", "feedback"}:
+        if response_kind == "router":
             return int(min(self.max_tokens, 600))
+        if response_kind == "feedback":
+            return int(max(4096, self.max_tokens))
         if response_kind == "planning":
-            return int(min(self.max_tokens, 1000))
+            return int(max(4096, self.max_tokens))
         if response_kind == "codegen":
             return int(min(self.max_tokens, 1400))
         return int(self.max_tokens)
 
     def _temperature_for_kind(self, response_kind: str) -> float:
-        if response_kind in {"router", "planning", "feedback"}:
+        if response_kind == "router":
+            return 0.0
+        if response_kind == "feedback":
+            return 0.1
+        if response_kind in {"router", "planning"}:
             return float(min(self.temperature, 0.2))
         return float(self.temperature)
 
@@ -182,21 +198,39 @@ class LLMClient:
         for attempt in range(self.max_retries + 1):
             t0 = time.time()
             try:
-                resp = client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    temperature=self._temperature_for_kind(response_kind),
-                    max_tokens=self._max_tokens_for_kind(response_kind),
-                )
-                content = resp.choices[0].message.content or ""
+                request_kwargs: dict[str, Any] = {
+                    "model": model,
+                    "messages": messages,
+                    "temperature": self._temperature_for_kind(response_kind),
+                    "max_tokens": self._max_tokens_for_kind(response_kind),
+                }
+                if response_kind in {"router", "planning", "feedback"}:
+                    request_kwargs["response_format"] = {"type": "json_object"}
+                resp = client.chat.completions.create(**request_kwargs)
+                choice0 = resp.choices[0]
+                finish_reason = str(getattr(choice0, "finish_reason", "") or "")
+                msg_obj = getattr(choice0, "message", None)
+                reasoning_content = getattr(msg_obj, "reasoning_content", None) if msg_obj is not None else None
+                reasoning_len = len(reasoning_content) if isinstance(reasoning_content, str) else 0
+                content = (msg_obj.content if msg_obj is not None else "") or ""
+                content_len = len(content)
                 if not content.strip():
-                    raise RuntimeError(f"Empty content from LLM for response_kind={response_kind}, model={model}")
+                    input_chars = sum(len(str(m.get("content", ""))) for m in messages)
+                    raise RuntimeError(
+                        "Empty content from LLM: "
+                        f"response_kind={response_kind}, model={model}, finish_reason={finish_reason}, "
+                        f"has_reasoning_content={bool(reasoning_content)}, reasoning_content_len={reasoning_len}, "
+                        f"input_chars={input_chars}"
+                    )
                 self._record_call(
                     response_kind=response_kind,
                     model=model,
                     success=True,
                     latency_sec=time.time() - t0,
                     error="",
+                    finish_reason=finish_reason,
+                    content_len=content_len,
+                    reasoning_content_len=reasoning_len,
                 )
                 return content
             except Exception as exc:  # noqa: BLE001
@@ -208,6 +242,9 @@ class LLMClient:
                     success=False,
                     latency_sec=time.time() - t0,
                     error=err_msg,
+                    finish_reason="",
+                    content_len=0,
+                    reasoning_content_len=0,
                 )
                 if attempt < self.max_retries:
                     time.sleep(1.2 * (attempt + 1))
