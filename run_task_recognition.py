@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 from pathlib import Path
 from typing import Any
 
@@ -96,7 +97,72 @@ def build_eval_sets() -> dict[str, list[dict[str, Any]]]:
     hard.append({"label": "restoration_capability_priority", "env_summary": {"critical_load_shortfall": 0.36, "material_stock": 0.11}, "trajectory_summary": {"mean_progress_delta": 0.003, "constraint_violation_rate": 0.28, "action_category_distribution": {"wait": 0.27}}})
     hard.append({"label": "global_efficiency_priority", "env_summary": {"communication_recovery_ratio": 0.72, "power_recovery_ratio": 0.70, "road_recovery_ratio": 0.68, "critical_load_shortfall": 0.24, "material_stock": 0.30}, "trajectory_summary": {"mean_progress_delta": 0.0018, "constraint_violation_rate": 0.05, "action_category_distribution": {"wait": 0.48}}})
     hard.append({"label": "critical_load_priority", "env_summary": {"communication_recovery_ratio": 0.57, "power_recovery_ratio": 0.49, "road_recovery_ratio": 0.56, "critical_load_shortfall": 0.59, "material_stock": 0.26}, "trajectory_summary": {"mean_progress_delta": 0.0035, "constraint_violation_rate": 0.12, "action_category_distribution": {"wait": 0.19}}})
-    return {"internal": internal, "independent": independent, "hard": hard}
+    paraphrase = build_paraphrase_set()
+    shuffled = build_shuffled_feature_order_set()
+    conflict_sparse = build_conflict_sparse_set()
+    return {
+        "internal": internal,
+        "independent": independent,
+        "hard": hard,
+        "paraphrase": paraphrase,
+        "shuffled_feature_order": shuffled,
+        "conflict_sparse": conflict_sparse,
+    }
+
+
+def _with_note(sample: dict[str, Any], note: str) -> dict[str, Any]:
+    s = json.loads(json.dumps(sample))
+    s["note"] = note
+    return s
+
+
+def build_paraphrase_set() -> list[dict[str, Any]]:
+    samples: list[dict[str, Any]] = []
+    for i in range(10):
+        samples.append(_with_note(_mk_critical(i + 40), "critical gap remains primary even if network gets partial uplift"))
+        samples.append(_with_note(_mk_restoration(i + 40), "capability bottleneck dominates; restoring means and access should come first"))
+        samples.append(_with_note(_mk_global(i + 40), "main issue is endgame coordination and finishing efficiency"))
+    return samples
+
+
+def build_shuffled_feature_order_set() -> list[dict[str, Any]]:
+    samples: list[dict[str, Any]] = []
+    for i in range(10):
+        s1 = _mk_critical(i + 60)
+        s1["feature_order_mode"] = "shuffled"
+        s1["feature_order_seed"] = 100 + i
+        samples.append(s1)
+        s2 = _mk_restoration(i + 60)
+        s2["feature_order_mode"] = "shuffled"
+        s2["feature_order_seed"] = 200 + i
+        samples.append(s2)
+        s3 = _mk_global(i + 60)
+        s3["feature_order_mode"] = "shuffled"
+        s3["feature_order_seed"] = 300 + i
+        samples.append(s3)
+    return samples
+
+
+def build_conflict_sparse_set() -> list[dict[str, Any]]:
+    samples: list[dict[str, Any]] = []
+    rnd = random.Random(7)
+    for i in range(10):
+        c = _mk_critical(i + 80)
+        # sparse fields + weak conflict noise
+        c["env_summary"].pop("communication_recovery_ratio", None)
+        c["trajectory_summary"]["constraint_violation_rate"] = 0.05 + 0.02 * rnd.random()
+        samples.append(c)
+
+        r = _mk_restoration(i + 80)
+        r["env_summary"].pop("road_recovery_ratio", None)
+        r["env_summary"]["critical_load_shortfall"] = 0.28 + 0.06 * rnd.random()
+        samples.append(r)
+
+        g = _mk_global(i + 80, hard=True)
+        g["trajectory_summary"]["mean_progress_delta"] = 0.0018 + 0.0008 * rnd.random()
+        g["env_summary"]["material_stock"] = 0.24 + 0.08 * rnd.random()
+        samples.append(g)
+    return samples
 
 
 def _macro_f1(y_true: list[str], y_pred: list[str]) -> float:
@@ -141,7 +207,13 @@ def eval_set(samples: list[dict[str, Any]], mode: str, recognizer: ScenarioTaskR
         else:
             if client is None:
                 raise RuntimeError("LLM mode requires initialized client")
-            r = recognizer.recognize_with_llm(client=client, system_prompt=SYSTEM_PROMPT, routing_context=ctx)
+            r = recognizer.recognize_with_llm(
+                client=client,
+                system_prompt=SYSTEM_PROMPT,
+                routing_context=ctx,
+                feature_order_mode=str(s.get("feature_order_mode", "stable")),
+                feature_order_seed=int(s.get("feature_order_seed", 0)),
+            )
             second_pass_used += int(bool(r.get("second_pass_used", False)))
         y_pred.append(str(r["task_mode"]))
 
@@ -170,7 +242,11 @@ def eval_set(samples: list[dict[str, Any]], mode: str, recognizer: ScenarioTaskR
 def main() -> None:
     parser = argparse.ArgumentParser(description="Three-task recognition-only runner.")
     parser.add_argument("--mode", choices=["rule", "llm", "eval"], default="rule")
-    parser.add_argument("--eval-set", choices=["internal", "independent", "hard", "all"], default="all")
+    parser.add_argument(
+        "--eval-set",
+        choices=["internal", "independent", "hard", "paraphrase", "shuffled_feature_order", "conflict_sparse", "all"],
+        default="all",
+    )
     parser.add_argument("--input-json", default="", help="Path to a JSON file with env_summary and trajectory_summary.")
     parser.add_argument("--output-json", default="", help="Optional path to write recognition output JSON.")
     parser.add_argument("--llm-mode", choices=["real"], default="real")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import random
 from collections import Counter
 from typing import Any
 
@@ -173,15 +174,28 @@ class ScenarioTaskRecognizer:
         conf = float(first_core.get("confidence", 0.0))
         margin = float(features.get("score_margin", 1.0))
         top2 = features.get("top2_candidate_tasks", [])
+        top1 = top2[0] if top2 else ""
+        predicted = str(first_core.get("task_mode", ""))
         comp = str(first_core.get("competing_signal", "")).lower()
         hints_top2 = any(t.replace("_priority", "").split("_")[0] in comp for t in top2)
-        if conf < 0.55:
+        clear_case = margin >= 0.12 and predicted == top1 and conf >= 0.50
+        moderate_clear = margin >= 0.08 and predicted == top1 and conf >= 0.62 and not hints_top2
+        if clear_case or moderate_clear:
+            return False, ""
+        if conf < 0.48:
             return True, "low_confidence"
-        if margin < 0.03:
+        if margin < 0.02:
             return True, "small_score_margin"
-        if hints_top2 and conf < 0.70:
+        if hints_top2 and conf < 0.62:
             return True, "competing_signal_points_to_top2"
         return False, ""
+
+    @staticmethod
+    def _reorder_features(features: dict[str, Any], seed: int) -> dict[str, Any]:
+        keys = list(features.keys())
+        rnd = random.Random(seed)
+        rnd.shuffle(keys)
+        return {k: features[k] for k in keys}
 
     def recognize_with_llm(
         self,
@@ -190,10 +204,17 @@ class ScenarioTaskRecognizer:
         routing_context: dict[str, Any],
         previous_task: str = "",
         previous_round_failed: bool = False,
+        feature_order_mode: str = "stable",
+        feature_order_seed: int = 0,
     ) -> dict[str, Any]:
         features = self.extract_decision_features(routing_context)
+        prompt_features = (
+            self._reorder_features(features, feature_order_seed)
+            if feature_order_mode == "shuffled"
+            else features
+        )
         user_prompt = build_task_recognition_prompt(
-            decision_features=features,
+            decision_features=prompt_features,
             previous_task=previous_task,
             previous_round_failed=previous_round_failed,
         )
