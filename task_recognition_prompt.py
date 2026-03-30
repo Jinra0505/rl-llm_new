@@ -11,56 +11,36 @@ TASK_SET = [
 
 
 def build_task_recognition_prompt(
-    routing_context: dict[str, Any],
+    decision_features: dict[str, Any],
     previous_task: str = "",
     previous_round_failed: bool = False,
 ) -> str:
-    """Builds the recognition prompt for strict 3-task scenario classification."""
+    """Build strict, feature-first routing prompt."""
     return (
-        "You are a strict scenario recognizer for a tri-layer recovery environment.\n"
+        "You are a strict tri-task recognizer.\n"
+        "Use ONLY the structured feature table below.\n"
         "Select exactly one task_mode from:\n"
         "- critical_load_priority\n"
         "- restoration_capability_priority\n"
         "- global_efficiency_priority\n\n"
-        "Step-by-step decision rules:\n"
-        "1) Check dominant bottleneck first.\n"
-        "2) Compare strongest signal vs competing signal.\n"
-        "3) Output only compact JSON.\n\n"
-        "Task boundary definitions:\n"
-        "A) critical_load_priority:\n"
-        "- dominant contradiction is unmet critical load (high shortfall / key nodes not restored).\n"
-        "- even if other layers are imperfect, choose this when critical-load gap is clearly largest.\n"
-        "- if capability constraints are the root cause of unmet load, do not choose critical first.\n"
-        "B) restoration_capability_priority:\n"
-        "- dominant contradiction is insufficient capability to continue restoration.\n"
-        "- examples: weak material, low connectivity, poor feasible-action capability, backbone/resource/path bottlenecks.\n"
-        "- focus is 'can we continue restoring now', not final finishing target.\n"
-        "- if unmet critical load is mostly caused by these capability bottlenecks, choose restoration.\n"
-        "C) global_efficiency_priority:\n"
-        "- critical load and core capability are no longer dominant bottlenecks.\n"
-        "- dominant goal is finishing-stage coordination and global efficiency optimization.\n\n"
-        "Prohibitions:\n"
-        "- Do NOT choose critical_load_priority just because text mentions 'critical'.\n"
-        "- If critical load is already mostly recovered and remaining issue is finishing coordination, prefer global_efficiency_priority.\n"
-        "- If the main issue is resource/connectivity/capability shortage, prefer restoration_capability_priority.\n"
-        "- In conflicting signals, avoid defaulting to critical_load_priority without clear dominant evidence.\n\n"
-        "Very short exemplars:\n"
-        "- Ex1: critical shortfall very high; power/comm moderate -> critical_load_priority\n"
-        "- Ex2: material/backbone/feasible actions severely constrained -> restoration_capability_priority\n"
-        "- Ex3: critical mostly recovered, system near-finish, cross-layer coordination inefficiency -> global_efficiency_priority\n"
-        "- Ex4 (boundary): backlog exists but materials/backbone/actions are insufficient -> restoration_capability_priority\n"
-        "- Ex5 (boundary): backlog exists, materials/backbone/actions are sufficient, issue is finishing coordination -> global_efficiency_priority\n\n"
-        "Return JSON only. No markdown. No extra text.\n"
-        "Schema (fixed keys only):\n"
-        "{\n"
-        '  "task_mode": "...",\n'
-        '  "confidence": 0.0,\n'
-        '  "reason": "1-2 short sentences",\n'
-        '  "dominant_signal": "short phrase",\n'
-        '  "competing_signal": "short phrase"\n'
-        "}\n\n"
+        "Task boundaries:\n"
+        "A) critical_load_priority: choose only when critical-load gap itself is dominant.\n"
+        "   Do not choose it just because text mentions critical/key load.\n"
+        "   If unmet critical load is mainly caused by weak capability/resources, do not choose critical first.\n"
+        "B) restoration_capability_priority: choose when restoration capability is dominant bottleneck\n"
+        "   (material/backbone/path/connectivity/feasible-action constraints).\n"
+        "   Even with unmet critical load, choose restoration if capability bottleneck is primary.\n"
+        "C) global_efficiency_priority: choose when critical gap and capability bottleneck are no longer dominant\n"
+        "   and main issue is finishing coordination/global efficiency.\n\n"
+        "Short exemplars:\n"
+        "- material+backbone constrained, critical still unmet -> restoration_capability_priority\n"
+        "- capability sufficient, critical shortfall still dominant -> critical_load_priority\n"
+        "- near-finish, cross-layer coordination inefficiency -> global_efficiency_priority\n\n"
+        "Output JSON only (no markdown, no extra text).\n"
+        "Required keys only:\n"
+        "{\"task_mode\":\"...\",\"confidence\":0.0,\"dominant_signal\":\"...\",\"competing_signal\":\"...\",\"reason\":\"one sentence\"}\n\n"
         f"Previous task: {previous_task or 'none'}\n"
         f"Previous round failed: {str(previous_round_failed).lower()}\n"
-        "Context JSON:\n"
-        f"{json.dumps(routing_context, indent=2)}"
+        "Structured feature table JSON:\n"
+        f"{json.dumps(decision_features, ensure_ascii=False, indent=2)}"
     )
