@@ -2,14 +2,14 @@ llm:
   base_url: https://api.deepseek.com
   model_chat: deepseek-chat
   model_reasoner: deepseek-reasoner
-  timeout_seconds: 30
-  max_retries: 0
+  timeout_seconds: 60
+  max_retries: 2
   temperature: 0.3
   max_tokens: 1800
 
 outer_loop:
-  rounds: 1
-  candidates_per_round: 1
+  rounds: 2
+  candidates_per_round: 2
 
 scenario:
   severity: moderate  # mild | moderate | severe
@@ -35,6 +35,7 @@ env:
     11: mes_to_C
     12: feeder_reconfigure
     13: coordinated_balanced
+    14: wait_hold
 
 training:
   train_episodes: 120
@@ -55,12 +56,12 @@ selection:
   higher_is_better: true
   task_mode_metric_weights:
     __global__:
-      eval_success_rate: 0.40
-      critical_load_recovery_ratio: 0.25
-      min_recovery_ratio: 0.20
-      constraint_violation_rate_eval: -0.35
-      mean_progress_delta_eval: 0.08
-      late_stage_targeted_action_rate: 0.08
+      eval_success_rate: 0.48
+      critical_load_recovery_ratio: 0.24
+      min_recovery_ratio: 0.18
+      mean_progress_delta_eval: 0.16
+      constraint_violation_rate_eval: -0.18
+      late_stage_targeted_action_rate: 0.10
 
 reward_weights:
   delta_power: 0.20
@@ -73,13 +74,11 @@ reward_weights:
   mes_overuse_penalty: 0.03
 
 task_modes:
-  default: coordinated_restoration
+  default: global_efficiency_priority
   allowed:
-    - road_opening_priority
-    - critical_power_priority
-    - backbone_comm_priority
-    - coordinated_restoration
-    - stabilization_priority
+    - critical_load_priority
+    - restoration_capability_priority
+    - global_efficiency_priority
 
 paths:
   generated_dir: generated
