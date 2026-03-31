@@ -198,6 +198,7 @@ def run_training(
     severity: str = "moderate",
     intrinsic_mode: str = "full",
     intrinsic_scale: float = 1.0,
+    env_reset_options: dict[str, Any] | None | callable = None,
 ) -> dict[str, Any]:
     if str(llm_mode).lower() != "real":
         raise RuntimeError(f"Formal run requires llm_mode=real, got: {llm_mode}")
@@ -229,7 +230,15 @@ def run_training(
     eps_end = float(dqn_cfg.get("epsilon_end", 0.05))
     eps_decay_steps = int(dqn_cfg.get("epsilon_decay_steps", 5000))
 
-    s0, info0 = env.reset(seed=seed)
+    def _resolve_reset_options(phase: str, episode_idx: int) -> dict[str, Any] | None:
+        if env_reset_options is None:
+            return None
+        if callable(env_reset_options):
+            out = env_reset_options(phase, episode_idx)
+            return dict(out) if out else None
+        return dict(env_reset_options)
+
+    s0, info0 = env.reset(seed=seed, options=_resolve_reset_options("init", 0))
     rs0 = _effective_state(_call_revise(revise_state_fn, s0, info0), max_revised_dim)
     state_dim = int(rs0.shape[0])
 
@@ -252,9 +261,27 @@ def run_training(
     crit_scores: list[float] = []
     violations = 0
     train_total_steps = 0
+    training_reset_checks: list[dict[str, Any]] = []
+    eval_reset_checks: list[dict[str, Any]] = []
 
     for ep in range(train_episodes):
-        s, info = env.reset(seed=seed + ep)
+        train_opts = _resolve_reset_options("train", ep)
+        s, info = env.reset(seed=seed + ep, options=train_opts)
+        if ep < 3:
+            training_reset_checks.append(
+                {
+                    "episode": ep,
+                    "preset_name": str(info.get("preset_name", "")),
+                    "mean_power": float(np.mean(s[0:3])),
+                    "mean_comm": float(np.mean(s[3:6])),
+                    "mean_road": float(np.mean(s[6:9])),
+                    "mean_critical": float(np.mean(s[9:12])),
+                    "backbone_mean": float(np.mean(s[12:15])),
+                    "material_stock": float(s[20]),
+                    "switching_capability": float(s[21]),
+                    "stage_indicator": float(s[22]),
+                }
+            )
         ep_reward = 0.0
         ep_violation_count = 0
         mid_stagnation_steps = 0
@@ -453,7 +480,23 @@ def run_training(
     representative_eval_summary: dict[str, Any] = {}
 
     for ep in range(eval_episodes):
-        s, info = env.reset(seed=seed + 1000 + ep)
+        eval_opts = _resolve_reset_options("eval", ep)
+        s, info = env.reset(seed=seed + 1000 + ep, options=eval_opts)
+        if ep < 3:
+            eval_reset_checks.append(
+                {
+                    "episode": ep,
+                    "preset_name": str(info.get("preset_name", "")),
+                    "mean_power": float(np.mean(s[0:3])),
+                    "mean_comm": float(np.mean(s[3:6])),
+                    "mean_road": float(np.mean(s[6:9])),
+                    "mean_critical": float(np.mean(s[9:12])),
+                    "backbone_mean": float(np.mean(s[12:15])),
+                    "material_stock": float(s[20]),
+                    "switching_capability": float(s[21]),
+                    "stage_indicator": float(s[22]),
+                }
+            )
         total = 0.0
         ep_steps = 0
         ep_invalid = 0
@@ -675,6 +718,8 @@ def run_training(
                 k: v / float(max(1, sum(eval_action_usage.values()))) for k, v in eval_action_usage.items()
             },
         },
+        "training_reset_checks": training_reset_checks,
+        "eval_reset_checks": eval_reset_checks,
     }
 
     weights_cfg = task_mode_metric_weights or {}

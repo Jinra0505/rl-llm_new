@@ -8,7 +8,7 @@ def build_cases() -> list[dict[str, Any]]:
         {
             "case_name": "uncertain_boundary_u1",
             "case_type": "uncertain_like",
-            "preset_name": "uncertain_boundary_case",
+            "preset_name": "uncertain_boundary_case_u1",
             "oracle_task": "restoration_capability_priority",
             "routing_context": {
                 "env_summary": {
@@ -29,7 +29,7 @@ def build_cases() -> list[dict[str, Any]]:
         {
             "case_name": "uncertain_boundary_u2",
             "case_type": "uncertain_like",
-            "preset_name": "uncertain_boundary_case",
+            "preset_name": "uncertain_boundary_case_u2",
             "oracle_task": "critical_load_priority",
             "routing_context": {
                 "env_summary": {
@@ -50,7 +50,7 @@ def build_cases() -> list[dict[str, Any]]:
         {
             "case_name": "definition_shift_d1",
             "case_type": "definition_shift_like",
-            "preset_name": "definition_shift_case",
+            "preset_name": "definition_shift_case_d1",
             "oracle_task": "global_efficiency_priority",
             "routing_context": {
                 "env_summary": {
@@ -72,7 +72,7 @@ def build_cases() -> list[dict[str, Any]]:
         {
             "case_name": "definition_shift_d2",
             "case_type": "definition_shift_like",
-            "preset_name": "definition_shift_case",
+            "preset_name": "definition_shift_case_d2",
             "oracle_task": "restoration_capability_priority",
             "routing_context": {
                 "env_summary": {

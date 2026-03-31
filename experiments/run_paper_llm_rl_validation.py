@@ -10,58 +10,18 @@ from experiments.offline_llm_recognizer import recognize_with_offline_proxy
 from experiments.task_module_registry import get_module_path
 from task_recognizer import ScenarioTaskRecognizer
 from train_rl import run_training
-import mock_recovery_env
 
 OUT_DIR = Path("outputs/paper_llm_rl_validation")
 
 
-def apply_preset(env: Any, preset_name: str) -> None:
-    # Minimal reset-state overwrite (keeps env API unchanged).
-    if preset_name == "critical_load_dominant":
-        env.power = [0.48, 0.52, 0.49]
-        env.comm = [0.58, 0.60, 0.57]
-        env.road = [0.57, 0.58, 0.56]
-        env.critical = [0.45, 0.42, 0.43]
-        env.material = 0.38
-    elif preset_name == "capability_bottleneck_dominant":
-        env.power = [0.55, 0.58, 0.56]
-        env.comm = [0.52, 0.55, 0.53]
-        env.road = [0.42, 0.45, 0.44]
-        env.critical = [0.68, 0.66, 0.64]
-        env.material = 0.18
-    elif preset_name == "global_finishing_dominant":
-        env.power = [0.70, 0.72, 0.69]
-        env.comm = [0.68, 0.70, 0.69]
-        env.road = [0.67, 0.69, 0.68]
-        env.critical = [0.83, 0.86, 0.84]
-        env.material = 0.32
-    elif preset_name == "uncertain_boundary_case":
-        env.power = [0.52, 0.53, 0.51]
-        env.comm = [0.46, 0.48, 0.47]
-        env.road = [0.40, 0.42, 0.41]
-        env.critical = [0.62, 0.60, 0.58]
-        env.material = 0.16
-    elif preset_name == "definition_shift_case":
-        env.power = [0.58, 0.60, 0.59]
-        env.comm = [0.47, 0.49, 0.48]
-        env.road = [0.44, 0.46, 0.45]
-        env.critical = [0.75, 0.77, 0.76]
-        env.material = 0.15
-
-
-def patch_env_reset_for_preset(preset_name: str):
-    original = mock_recovery_env.ProjectRecoveryEnv.reset
-
-    def _patched(self, *args, **kwargs):
-        obs, info = original(self, *args, **kwargs)
-        apply_preset(self, preset_name)
-        obs = self.state.copy()
-        info = dict(info)
-        info["preset_name"] = preset_name
-        return obs, info
-
-    mock_recovery_env.ProjectRecoveryEnv.reset = _patched
-    return original
+def _preset_for_case(case_name: str, fallback: str) -> str:
+    mapping = {
+        "uncertain_boundary_u1": "uncertain_boundary_case_u1",
+        "uncertain_boundary_u2": "uncertain_boundary_case_u2",
+        "definition_shift_d1": "definition_shift_case_d1",
+        "definition_shift_d2": "definition_shift_case_d2",
+    }
+    return mapping.get(case_name, fallback)
 
 
 def run_chain(case: dict[str, Any], chain: str, seed: int) -> dict[str, Any]:
@@ -82,24 +42,22 @@ def run_chain(case: dict[str, Any], chain: str, seed: int) -> dict[str, Any]:
     out_json = OUT_DIR / "runs" / f"{case['case_name']}__{chain}__seed{seed}.json"
     out_json.parent.mkdir(parents=True, exist_ok=True)
 
-    original_reset = patch_env_reset_for_preset(case["preset_name"])
-    try:
-        metrics = run_training(
-            revise_module_path=get_module_path(chosen),
-            env_name="project_recovery",
-            train_episodes=60,
-            eval_episodes=8,
-            max_steps_per_episode=90,
-            gamma=0.99,
-            task_mode=chosen,
-            llm_mode="real",
-            output_json_path=out_json,
-            seed=seed,
-            intrinsic_mode="full",
-            intrinsic_scale=0.1,
-        )
-    finally:
-        mock_recovery_env.ProjectRecoveryEnv.reset = original_reset
+    preset_name = _preset_for_case(case["case_name"], case["preset_name"])
+    metrics = run_training(
+        revise_module_path=get_module_path(chosen),
+        env_name="project_recovery",
+        train_episodes=60,
+        eval_episodes=8,
+        max_steps_per_episode=90,
+        gamma=0.99,
+        task_mode=chosen,
+        llm_mode="real",
+        output_json_path=out_json,
+        seed=seed,
+        intrinsic_mode="full",
+        intrinsic_scale=0.1,
+        env_reset_options={"preset_name": preset_name, "preset_jitter": 0.01},
+    )
 
     keep = {
         k: metrics.get(k)
@@ -128,6 +86,7 @@ def run_chain(case: dict[str, Any], chain: str, seed: int) -> dict[str, Any]:
         "whether_llm_matches_oracle": llm_proxy["task_mode"] == case.get("oracle_task"),
         "whether_rule_matches_oracle": rule["task_mode"] == case.get("oracle_task"),
         "selected_task_for_chain": chosen,
+        "preset_name": preset_name,
         **keep,
     }
 
@@ -166,6 +125,25 @@ def write_outputs(summary: dict[str, Any]) -> None:
         json.dumps(summary["records"], indent=2, ensure_ascii=False), encoding="utf-8"
     )
 
+    snapshots = {}
+    training_checks = {}
+    eval_checks = {}
+    for rec in summary["records"]:
+        run_json = OUT_DIR / "runs" / f"{rec['case_name']}__{rec['chain']}__seed42.json"
+        if not run_json.exists():
+            continue
+        payload = json.loads(run_json.read_text(encoding="utf-8"))
+        key = f"{rec['case_name']}__{rec['chain']}"
+        tr = payload.get("training_reset_checks", [])
+        ev = payload.get("eval_reset_checks", [])
+        if tr:
+            snapshots[key] = tr[0]
+        training_checks[key] = tr
+        eval_checks[key] = ev
+    (OUT_DIR / "case_env_snapshot.json").write_text(json.dumps(snapshots, indent=2, ensure_ascii=False), encoding="utf-8")
+    (OUT_DIR / "training_env_check.json").write_text(json.dumps(training_checks, indent=2, ensure_ascii=False), encoding="utf-8")
+    (OUT_DIR / "eval_env_check.json").write_text(json.dumps(eval_checks, indent=2, ensure_ascii=False), encoding="utf-8")
+
     csv_path = OUT_DIR / "llm_rl_downstream_validation_table.csv"
     with csv_path.open("w", encoding="utf-8", newline="") as f:
         if summary["table"]:
@@ -177,6 +155,8 @@ def write_outputs(summary: dict[str, Any]) -> None:
 本补实验采用 offline LLM decision proxy for downstream validation，不调用真实 API。  
 现有 recognizer_metrics_latest.json 已表明：LLM 在 uncertain、definition_shift 场景优于 rule。  
 本次进一步将 rule/llm_proxy 识别结果映射到固定 task-oriented module，再进入同配置 RL。  
+上一版问题根因为：case 信息主要停留在 routing_context，RL 环境 reset 未稳定接入 case preset，导致同 task 下跨 case 指标过度同质。  
+本次修复：train_rl.run_training 新增 env_reset_options，并在 train/eval 每次 reset 统一注入 preset；同时输出 case_env_snapshot / training_env_check / eval_env_check 证明生效。  
 在 uncertain_like 与 definition_shift_like 中，rule 与 llm_proxy 任务选择出现差异。  
 这些差异会传递到下游：selection_score 与 success_rate 在多例中发生可观变化。  
 在 clear control case 中，两者任务一致或差异较小，性能接近。  
@@ -196,7 +176,10 @@ def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     cases = build_cases()
     records: list[dict[str, Any]] = []
-    log_lines = []
+    log_lines = [
+        "Root cause (previous version): case preset was not reliably wired into every train/eval reset, causing same-task metrics to collapse across cases.",
+        "Fix: use train_rl.run_training(env_reset_options=...) and emit case_env_snapshot/training_env_check/eval_env_check for verification.",
+    ]
 
     for case in cases:
         for chain in ["rule", "llm_proxy"]:

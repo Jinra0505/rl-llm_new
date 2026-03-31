@@ -108,8 +108,100 @@ class ProjectRecoveryEnv(gym.Env):
             return "wait"
         return "coordinated"
 
+    def _apply_preset(self, s: np.ndarray, preset_name: str, jitter: float = 0.0) -> np.ndarray:
+        presets: dict[str, dict[str, Any]] = {
+            "critical_load_dominant": {
+                "power": [0.48, 0.52, 0.49],
+                "comm": [0.58, 0.60, 0.57],
+                "road": [0.57, 0.58, 0.56],
+                "critical": [0.45, 0.42, 0.43],
+                "backbone": [0.55, 0.60, 0.58],
+                "mes_soc": 0.58,
+                "material": 0.38,
+                "switching": 0.62,
+            },
+            "capability_bottleneck_dominant": {
+                "power": [0.55, 0.58, 0.56],
+                "comm": [0.50, 0.52, 0.51],
+                "road": [0.40, 0.42, 0.41],
+                "critical": [0.66, 0.64, 0.63],
+                "backbone": [0.47, 0.45, 0.44],
+                "mes_soc": 0.52,
+                "material": 0.18,
+                "switching": 0.48,
+            },
+            "global_finishing_dominant": {
+                "power": [0.72, 0.73, 0.71],
+                "comm": [0.70, 0.72, 0.71],
+                "road": [0.69, 0.70, 0.68],
+                "critical": [0.85, 0.87, 0.86],
+                "backbone": [0.74, 0.73, 0.72],
+                "mes_soc": 0.60,
+                "material": 0.33,
+                "switching": 0.72,
+            },
+            "uncertain_boundary_case_u1": {
+                "power": [0.53, 0.54, 0.52],
+                "comm": [0.45, 0.47, 0.46],
+                "road": [0.39, 0.41, 0.40],
+                "critical": [0.62, 0.60, 0.58],
+                "backbone": [0.43, 0.44, 0.42],
+                "mes_soc": 0.50,
+                "material": 0.15,
+                "switching": 0.46,
+            },
+            "uncertain_boundary_case_u2": {
+                "power": [0.50, 0.51, 0.49],
+                "comm": [0.56, 0.57, 0.55],
+                "road": [0.55, 0.56, 0.54],
+                "critical": [0.54, 0.52, 0.51],
+                "backbone": [0.57, 0.58, 0.56],
+                "mes_soc": 0.62,
+                "material": 0.34,
+                "switching": 0.63,
+            },
+            "definition_shift_case_d1": {
+                "power": [0.69, 0.70, 0.68],
+                "comm": [0.67, 0.69, 0.68],
+                "road": [0.65, 0.67, 0.66],
+                "critical": [0.83, 0.84, 0.82],
+                "backbone": [0.70, 0.69, 0.68],
+                "mes_soc": 0.59,
+                "material": 0.31,
+                "switching": 0.70,
+            },
+            "definition_shift_case_d2": {
+                "power": [0.57, 0.58, 0.56],
+                "comm": [0.30, 0.33, 0.31],
+                "road": [0.28, 0.30, 0.29],
+                "critical": [0.70, 0.71, 0.69],
+                "backbone": [0.32, 0.34, 0.31],
+                "mes_soc": 0.55,
+                "material": 0.24,
+                "switching": 0.40,
+            },
+        }
+        if preset_name not in presets:
+            return s
+        p = presets[preset_name]
+        s[0:3] = np.asarray(p["power"], dtype=np.float32)
+        s[3:6] = np.asarray(p["comm"], dtype=np.float32)
+        s[6:9] = np.asarray(p["road"], dtype=np.float32)
+        s[9:12] = np.asarray(p["critical"], dtype=np.float32)
+        s[12:15] = np.asarray(p["backbone"], dtype=np.float32)
+        s[19] = float(p["mes_soc"])
+        s[20] = float(p["material"])
+        s[21] = float(p["switching"])
+        if jitter > 0.0:
+            noise = self.rng.normal(0.0, jitter, size=15).astype(np.float32)
+            s[0:15] = np.clip(s[0:15] + noise, 0.0, 1.0)
+            s[19] = float(np.clip(s[19] + self.rng.normal(0.0, jitter * 0.5), 0.0, 1.0))
+            s[20] = float(np.clip(s[20] + self.rng.normal(0.0, jitter * 0.5), 0.0, 1.0))
+            s[21] = float(np.clip(s[21] + self.rng.normal(0.0, jitter * 0.5), 0.0, 1.0))
+        return s
+
     def reset(self, *, seed: int | None = None, options: dict[str, Any] | None = None):
-        _ = options
+        options = options or {}
         if seed is not None:
             self.rng = np.random.default_rng(seed)
 
@@ -134,11 +226,18 @@ class ProjectRecoveryEnv(gym.Env):
         s[19] = self.rng.uniform(0.5, 0.9) * difficulty  # mes_soc
         s[20] = self.rng.uniform(0.5, 0.95) * difficulty  # material_stock
         s[21] = self.rng.uniform(0.5, 0.9) * difficulty  # switching capability
+
+        preset_name = str(options.get("preset_name", "")).strip()
+        preset_jitter = float(options.get("preset_jitter", 0.0))
+        if preset_name:
+            s = self._apply_preset(s, preset_name, jitter=preset_jitter)
         s[22], _ = self._stage(s)
         s[23] = 0.0
 
         self.state = self._clip01(s)
-        return self.state.copy(), self._build_info(progress_delta=0.0, invalid_action=False, invalid_reason="", mes_used=False)
+        info = self._build_info(progress_delta=0.0, invalid_action=False, invalid_reason="", mes_used=False)
+        info["preset_name"] = preset_name
+        return self.state.copy(), info
 
     def step(self, action: int):
         action = int(action)
