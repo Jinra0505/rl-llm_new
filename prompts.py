@@ -11,8 +11,8 @@ Environment state has 24 dims:
 0:3 power A/B/C, 3:6 comm A/B/C, 6:9 road A/B/C, 9:12 critical load A/B/C,
 12:15 backbone power/comm/road, 15:18 crew power/comm/road, 18 mes location (/2),
 19 mes_soc, 20 material_stock, 21 switching_capability, 22 stage_indicator, 23 constraint_flag.
-Action space has 14 actions:
-0-2 road A/B/C, 3-5 power A/B/C, 6-8 comm A/B/C, 9-11 mes_to A/B/C, 12 feeder_reconfigure, 13 coordinated_balanced.
+Action space has 15 actions:
+0-2 road A/B/C, 3-5 power A/B/C, 6-8 comm A/B/C, 9-11 mes_to A/B/C, 12 feeder_reconfigure, 13 coordinated_balanced, 14 wait_hold.
 """
 
 CODEGEN_PROMPT = """Task mode: {task_mode}, stage: {stage}
@@ -22,27 +22,44 @@ Observation schema summary:
 Planning blueprint JSON:
 {planning_json}
 Generate one module that improves policy state representation and intrinsic shaping for this 24D state.
+Hard constraints for revise_state:
+- output must always be 1-D with constant length across inputs
+- output length must always be >= 24
+- keep the original 24 raw dimensions intact (do not drop/reorder/compress them)
+- you may append only a small number of summary features (target: 0-6 appended dims)
+- do NOT return a subset of state and do NOT compress to fewer than 24 dims
 Prioritize system-level recovery over single-layer gains:
 - critical load recovery and completion progress
 - balanced tri-layer recovery across zones
 - lower invalid actions / constraint violations
+- preserve material buffer for late-stage completion
 - avoid invalid or precondition-violating actions
 - do not overuse feeder/coordinated actions when prerequisites are weak (e.g., low mes_soc, low backbone_comm, low material)
 - prioritize low-violation completion in late-stage finishing
+- include explicit signals to reach late stage and complete restoration
+- intrinsic reward should be small, dense, progress-oriented, and smooth
+- prefer mostly delta-based terms (state improvement / progress deltas)
+- avoid many hard thresholds and branch-heavy logic
+- do not duplicate invalid-action / constraint / wait penalties already handled elsewhere
+- avoid large constant bonuses/penalties and avoid overly aggressive late-stage shaping
+- do not reward conservative inaction
 Only output code with revise_state and intrinsic_reward (no extra dependencies/modules).
+Keep code short and robust (target <= 45 lines).
 Return JSON keys: file_name, rationale, code, expected_behavior.
 """
 
 ROUTER_PROMPT = """Select one task mode from:
-- road_opening_priority
-- critical_power_priority
-- backbone_comm_priority
-- coordinated_restoration
-- stabilization_priority
+- critical_load_priority
+- restoration_capability_priority
+- global_efficiency_priority
 Use stage, weakest layer, weakest zone, critical-load shortfall, backbone_comm_ratio, and violation rates.
-Do not over-prioritize communication-only gains when critical-load shortfall is high.
-Prefer critical_power_priority or coordinated_restoration when system-level completion is blocked.
+Do NOT over-select critical_load_priority when shortfall is only moderate.
+Prefer critical_load_priority only when shortfall is clearly dominant and power/critical bottlenecks block completion.
+Prefer restoration_capability_priority when road/communication/resources limit feasible actions.
+Prefer global_efficiency_priority when a balanced multi-layer recovery is needed.
 Return JSON with: task_mode, confidence, reason, stage.
+Round-2 switching rule:
+- If previous round shows low success, low progress, or unfinished middle-stage behavior, switch task_mode from previous round unless there is strong evidence the same task is still the dominant bottleneck.
 """
 
 PLANNING_PROMPT = """Using the routing context + task_mode + stage, produce a concise shaping planning JSON.
@@ -60,11 +77,29 @@ Planning constraints:
 - avoid invalid or precondition-violating actions
 - avoid overusing feeder/coordinated actions when prerequisites are weak
 - prioritize low-violation completion and targeted finishing actions on weakest layer/zone
+- include explicit anti-stagnation strategy for long middle-stage trajectories
+- include resource-preservation strategy to keep enough material for late-stage completion
+- include explicit anti-wait-overuse rule: wait_hold should be safety-only, not dominant when feasible recovery actions exist
+- include explicit round-specific task-switch rationale tied to prior-round failure patterns
+- intrinsic shaping should be small, dense, and progress-oriented
+- do not duplicate invalid-action / constraint / wait penalties already handled elsewhere
+- do not reward conservative inaction
 Return JSON only.
 """
 
-FEEDBACK_PROMPT = """Given candidate metrics, return JSON with:
-- improvement_focus
-- keep_signals
-- avoid_patterns
+FEEDBACK_PROMPT = """Return JSON only. No markdown. No code fences. No extra text before or after JSON.
+Output schema (fixed keys only):
+{
+  "improvement_focus": ["short phrase", "..."],
+  "keep_signals": ["short phrase", "..."],
+  "avoid_patterns": ["short phrase", "..."],
+  "finish_strategy_adjustments": ["short phrase", "..."],
+  "confidence": 0.0
+}
+Rules:
+- Keep each list concise (0-4 items, short phrases only).
+- Confidence must be a float in [0, 1].
+- Keep output brief and operational, avoid long explanations.
+- Use Lipschitz smoothness summary when provided: keep informative low-sensitivity signals and reduce unstable high-sensitivity state-reward mappings.
+- If smoothness is poor, prioritize stabilizing reward shaping over adding more aggressive bonuses.
 """

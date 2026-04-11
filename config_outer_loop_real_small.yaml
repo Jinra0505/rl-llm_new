@@ -1,0 +1,85 @@
+llm:
+  base_url: https://api.deepseek.com
+  model_chat: deepseek-chat
+  model_reasoner: deepseek-reasoner
+  timeout_seconds: 60
+  max_retries: 2
+  temperature: 0.3
+  max_tokens: 1800
+outer_loop:
+  rounds: 2
+  candidates_per_round: 2
+scenario:
+  severity: moderate
+env:
+  name: project_recovery
+  max_steps: 40
+  topology:
+    zones:
+    - A
+    - B
+    - C
+    backbone_nodes:
+    - P0
+    - C0
+    - R0
+  action_names:
+    0: road_A
+    1: road_B
+    2: road_C
+    3: power_A
+    4: power_B
+    5: power_C
+    6: comm_A
+    7: comm_B
+    8: comm_C
+    9: mes_to_A
+    10: mes_to_B
+    11: mes_to_C
+    12: feeder_reconfigure
+    13: coordinated_balanced
+    14: wait_hold
+training:
+  train_episodes: 30
+  eval_episodes: 8
+  gamma: 0.98
+  batch_size: 64
+  replay_size: 30000
+  min_replay_size: 500
+  train_freq: 1
+  target_update_interval: 250
+  learning_rate: 0.0008
+  hidden_dim: 128
+  epsilon_start: 1.0
+  epsilon_end: 0.05
+  epsilon_decay_steps: 12000
+selection:
+  higher_is_better: true
+  task_mode_metric_weights:
+    __global__:
+      eval_success_rate: 0.48
+      critical_load_recovery_ratio: 0.24
+      min_recovery_ratio: 0.18
+      mean_progress_delta_eval: 0.16
+      constraint_violation_rate_eval: -0.18
+      late_stage_targeted_action_rate: 0.1
+reward_weights:
+  delta_power: 0.2
+  delta_comm: 0.2
+  delta_road: 0.15
+  delta_critical_load: 0.2
+  synergy_bonus: 0.1
+  constraint_penalty: 0.08
+  action_switch_penalty: 0.04
+  mes_overuse_penalty: 0.03
+task_modes:
+  default: global_efficiency_priority
+  allowed:
+  - critical_load_priority
+  - restoration_capability_priority
+  - global_efficiency_priority
+paths:
+  generated_dir: generated
+  outputs_dir: outputs
+  formal_baseline_result: outputs/exp1_baseline_realcheck_v4.json
+  formal_outer_loop_dir: outputs/real_outer_loop_v4

@@ -32,6 +32,8 @@ def _action_category(action: int) -> str:
         return "mes"
     if action == 12:
         return "feeder"
+    if action == 14:
+        return "wait"
     return "coordinated"
 
 
@@ -133,7 +135,10 @@ def _valid_action_mask(action_dim: int, info: dict[str, Any]) -> np.ndarray:
             if road_ratio < 0.25:
                 mask[9 + zone_idx] = False
 
-    # Material shortage: mask material-intensive actions first.
+    # Material shortage: strongly suppress material-intensive actions.
+    if material < 0.15:
+        mask[0:9] = False
+        mask[13] = False
     if material < 0.10:
         mask[9:12] = False
         mask[12] = False
@@ -156,9 +161,9 @@ def _valid_action_mask(action_dim: int, info: dict[str, Any]) -> np.ndarray:
             mask[6:9] = False
         elif weak_layer == "1":
             mask[3:6] = False
-    if not mask.any():
-        mask[:] = False
-        mask[3] = True
+    # Always keep wait_hold action feasible for safe resource preservation.
+    if action_dim > 14:
+        mask[14] = True
     return mask
 
 
@@ -176,6 +181,47 @@ def _selection_score(metrics: dict[str, Any], weights_cfg: dict[str, Any]) -> fl
     return float(sum(float(w) * float(metrics.get(k, 0.0)) for k, w in weights.items()))
 
 
+def _estimate_episode_lipschitz_vector(
+    episode_states: list[np.ndarray],
+    episode_rewards: list[float],
+    state_dim: int,
+    eps: float = 1e-4,
+    ratio_clip: float = 1e3,
+    min_pairs: int = 3,
+) -> tuple[np.ndarray, bool, int]:
+    if len(episode_states) < 2 or len(episode_rewards) < 2:
+        return np.zeros(state_dim, dtype=np.float32), True, 0
+
+    pair_ratios: list[np.ndarray] = []
+    max_idx = min(len(episode_states), len(episode_rewards))
+    for idx in range(1, max_idx):
+        ds = np.abs(np.asarray(episode_states[idx], dtype=np.float32) - np.asarray(episode_states[idx - 1], dtype=np.float32))
+        dr = abs(float(episode_rewards[idx]) - float(episode_rewards[idx - 1]))
+        ratios = dr / np.maximum(ds, eps)
+        ratios = np.clip(ratios, 0.0, ratio_clip)
+        pair_ratios.append(ratios.astype(np.float32))
+
+    pair_count = len(pair_ratios)
+    if pair_count < min_pairs:
+        return np.zeros(state_dim, dtype=np.float32), True, pair_count
+
+    mat = np.stack(pair_ratios, axis=0)
+    vec = np.median(mat, axis=0).astype(np.float32)
+    vec = np.nan_to_num(vec, nan=0.0, posinf=ratio_clip, neginf=0.0)
+    return vec, False, pair_count
+
+
+def _top_lipschitz_dims(vec: np.ndarray, top_k: int = 3, reverse: bool = True) -> list[dict[str, Any]]:
+    if vec.size == 0:
+        return []
+    order = np.argsort(vec)
+    chosen = order[::-1][:top_k] if reverse else order[:top_k]
+    out: list[dict[str, Any]] = []
+    for idx in chosen.tolist():
+        out.append({"dim": int(idx), "value": float(vec[idx])})
+    return out
+
+
 def run_training(
     revise_module_path: Path | None,
     env_name: str,
@@ -191,6 +237,9 @@ def run_training(
     task_mode_metric_weights: dict[str, Any] | None = None,
     dqn_cfg: dict[str, Any] | None = None,
     severity: str = "moderate",
+    intrinsic_mode: str = "full",
+    intrinsic_scale: float = 1.0,
+    env_reset_options: dict[str, Any] | None | callable = None,
 ) -> dict[str, Any]:
     if str(llm_mode).lower() != "real":
         raise RuntimeError(f"Formal run requires llm_mode=real, got: {llm_mode}")
@@ -201,8 +250,11 @@ def run_training(
     np.random.seed(seed)
     torch.manual_seed(seed)
 
-    revise_module_path = revise_module_path or Path("baseline_noop.py")
-    revise_state_fn, intrinsic_reward_fn = load_revise_functions(revise_module_path)
+    if revise_module_path and revise_module_path.exists():
+        revise_state_fn, intrinsic_reward_fn = load_revise_functions(revise_module_path)
+    else:
+        revise_state_fn = lambda state, info=None: np.asarray(state, dtype=np.float32)
+        intrinsic_reward_fn = lambda state, action, next_state, info=None, revised_state=None: 0.0
 
     env = ProjectRecoveryEnv(max_steps=max_steps_per_episode, seed=seed, severity=severity)
     action_dim = int(env.action_space.n)
@@ -219,7 +271,15 @@ def run_training(
     eps_end = float(dqn_cfg.get("epsilon_end", 0.05))
     eps_decay_steps = int(dqn_cfg.get("epsilon_decay_steps", 5000))
 
-    s0, info0 = env.reset(seed=seed)
+    def _resolve_reset_options(phase: str, episode_idx: int) -> dict[str, Any] | None:
+        if env_reset_options is None:
+            return None
+        if callable(env_reset_options):
+            out = env_reset_options(phase, episode_idx)
+            return dict(out) if out else None
+        return dict(env_reset_options)
+
+    s0, info0 = env.reset(seed=seed, options=_resolve_reset_options("init", 0))
     rs0 = _effective_state(_call_revise(revise_state_fn, s0, info0), max_revised_dim)
     state_dim = int(rs0.shape[0])
 
@@ -242,19 +302,54 @@ def run_training(
     crit_scores: list[float] = []
     violations = 0
     train_total_steps = 0
+    training_reset_checks: list[dict[str, Any]] = []
+    eval_reset_checks: list[dict[str, Any]] = []
+
+    episode_lipschitz_vectors: list[list[float]] = []
+    lipschitz_low_sample_episodes = 0
+    lipschitz_pair_counts: list[int] = []
+    lipschitz_smooth_beta = 0.20
+    smoothed_lipschitz_vector = np.zeros(state_dim, dtype=np.float32)
+    last_episode_lipschitz_vector = np.zeros(state_dim, dtype=np.float32)
 
     for ep in range(train_episodes):
-        s, info = env.reset(seed=seed + ep)
+        train_opts = _resolve_reset_options("train", ep)
+        s, info = env.reset(seed=seed + ep, options=train_opts)
+        if ep < 3:
+            training_reset_checks.append(
+                {
+                    "episode": ep,
+                    "preset_name": str(info.get("preset_name", "")),
+                    "mean_power": float(np.mean(s[0:3])),
+                    "mean_comm": float(np.mean(s[3:6])),
+                    "mean_road": float(np.mean(s[6:9])),
+                    "mean_critical": float(np.mean(s[9:12])),
+                    "backbone_mean": float(np.mean(s[12:15])),
+                    "material_stock": float(s[20]),
+                    "switching_capability": float(s[21]),
+                    "stage_indicator": float(s[22]),
+                }
+            )
         ep_reward = 0.0
         ep_violation_count = 0
+        mid_stagnation_steps = 0
+        mid_wait_streak = 0
+        episode_effective_states: list[np.ndarray] = []
+        episode_composite_rewards: list[float] = []
 
         for step in range(max_steps_per_episode):
             rs = _effective_state(_call_revise(revise_state_fn, s, info), max_revised_dim)
             valid_mask = _valid_action_mask(action_dim, info)
+            valid_actions = np.where(valid_mask)[0]
+            if valid_actions.size == 0:
+                if action_dim > 14:
+                    valid_mask[14] = True
+                    valid_actions = np.array([14], dtype=int)
+                else:
+                    raise RuntimeError("No feasible action under current mask and no wait action is available.")
 
             eps = eps_end + (eps_start - eps_end) * max(0.0, 1.0 - global_step / float(max(1, eps_decay_steps)))
             if random.random() < eps:
-                valid_actions = np.where(valid_mask)[0]
                 a = int(np.random.choice(valid_actions))
             else:
                 with torch.no_grad():
@@ -282,35 +377,73 @@ def run_training(
             for th, bonus in ((0.75, 0.12), (0.85, 0.18), (0.90, 0.28)):
                 if prev_global < th <= next_global:
                     milestone_bonus += bonus
+            stage_prev = str(info.get("stage", "middle"))
+            stage_next = "late" if float(ns[22]) >= 0.99 else ("middle" if float(ns[22]) >= 0.49 else "early")
+            enter_late_bonus = 0.8 if (stage_prev != "late" and stage_next == "late") else 0.0
             step_ratio = float(step + 1) / float(max_steps_per_episode)
             late_factor = 1.0 + max(0.0, (step_ratio - 0.60) / 0.40) * 1.4
             invalid_penalty = (0.20 + 0.35 * late_factor) if bool(info.get("invalid_action", False)) else 0.0
             constraint_penalty = (0.25 + 0.45 * late_factor) if bool(info.get("constraint_violation", False)) else 0.0
-            completion_bonus = 4.0 if bool(terminated) else 0.0
+            completion_bonus = 6.5 if bool(terminated) else 0.0
             late_stage = str(info.get("stage", "middle")) == "late"
             coordinated_late_penalty = 0.35 if (late_stage and a == 13) else 0.0
             feeder_late_penalty = 0.22 if (late_stage and a == 12 and (float(info.get("backbone_comm_ratio", 1.0)) < 0.5)) else 0.0
             targeted_late_bonus = 0.12 if (late_stage and a in {3, 4, 5, 6, 7, 8}) else 0.0
             weakest_close_bonus = 0.18 * (weak_layer_gain + weak_zone_gain) if late_stage else 0.0
             low_violation_finish_bonus = 0.8 if (terminated and ep_violation_count <= 1) else 0.0
+            material_now = float(info.get("material_stock", ns[20] if len(ns) > 20 else 0.0))
+            material_zero_penalty = 0.8 if material_now <= 0.01 else 0.0
+            critical_low_material_penalty = 0.35 if (material_now < 0.10 and a != 14) else 0.0
+            material_buffer_bonus = 0.06 if (material_now > 0.22 and progress_bonus > 0.0) else 0.0
+            wait_misuse_penalty = 0.18 if (a == 14 and material_now > 0.22 and progress_bonus < 0.0008) else 0.0
+            if str(info.get("stage", "middle")) == "middle" and progress_bonus < 0.0015:
+                mid_stagnation_steps += 1
+            else:
+                mid_stagnation_steps = 0
+            if a == 14 and str(info.get("stage", "middle")) == "middle":
+                mid_wait_streak += 1
+            else:
+                mid_wait_streak = 0
+            feasible_non_wait_exists = np.any(valid_mask[:14]) if action_dim > 14 else np.any(valid_mask)
+            repeated_wait_penalty = 0.0
+            if a == 14 and str(info.get("stage", "middle")) == "middle" and feasible_non_wait_exists:
+                repeated_wait_penalty = 0.16 + 0.08 * max(0, mid_wait_streak - 1)
+            middle_stagnation_penalty = 0.18 if mid_stagnation_steps >= 6 else 0.0
+            severe_mid_stagnation_penalty = 0.28 if mid_stagnation_steps >= 12 else 0.0
+            sustainable_progress_bonus = 0.10 if (progress_bonus > 0.010 and material_now > 0.12) else 0.0
+            if intrinsic_mode in {"off", "state_only"}:
+                effective_ir = 0.0
+            else:
+                effective_ir = float(np.clip(float(intrinsic_scale) * float(ir), -0.30, 0.30))
             r = float(
                 ext_r
-                + ir
+                + effective_ir
                 + 0.25 * critical_gain
-                + 0.20 * progress_bonus
+                + 0.32 * progress_bonus
                 + 0.20 * weak_layer_gain
                 + 0.18 * weak_zone_gain
                 + milestone_bonus
+                + enter_late_bonus
                 + completion_bonus
                 + targeted_late_bonus
                 + weakest_close_bonus
                 + low_violation_finish_bonus
+                + material_buffer_bonus
+                + sustainable_progress_bonus
                 - invalid_penalty
                 - constraint_penalty
                 - coordinated_late_penalty
                 - feeder_late_penalty
+                - material_zero_penalty
+                - critical_low_material_penalty
+                - middle_stagnation_penalty
+                - severe_mid_stagnation_penalty
+                - wait_misuse_penalty
+                - repeated_wait_penalty
             )
             done = bool(terminated or truncated)
+            episode_effective_states.append(np.asarray(rs, dtype=np.float32))
+            episode_composite_rewards.append(float(r))
 
             nrs = _effective_state(_call_revise(revise_state_fn, ns, info), max_revised_dim)
             replay.add(rs, a, r, nrs, done)
@@ -352,6 +485,16 @@ def run_training(
                 break
 
         episode_rewards.append(ep_reward)
+        ep_lips_vec, low_sample, pair_count = _estimate_episode_lipschitz_vector(
+            episode_states=episode_effective_states,
+            episode_rewards=episode_composite_rewards,
+            state_dim=state_dim,
+        )
+        lipschitz_low_sample_episodes += int(low_sample)
+        lipschitz_pair_counts.append(int(pair_count))
+        smoothed_lipschitz_vector = (1.0 - lipschitz_smooth_beta) * smoothed_lipschitz_vector + lipschitz_smooth_beta * ep_lips_vec
+        last_episode_lipschitz_vector = ep_lips_vec
+        episode_lipschitz_vectors.append([float(x) for x in ep_lips_vec.tolist()])
 
     # Evaluation (greedy)
     eval_backbone_comm: list[float] = []
@@ -383,6 +526,10 @@ def run_training(
     eval_steps_per_episode: list[int] = []
     eval_terminated_count = 0
     eval_truncated_count = 0
+    eval_total_steps = 0
+    eval_total_invalid_count = 0
+    eval_total_violation_count = 0
+    eval_total_wait_count = 0
     eval_action_usage = {str(i): 0 for i in range(action_dim)}
     eval_stage_counts: Counter[str] = Counter()
     eval_invalid_reason_counts: Counter[str] = Counter()
@@ -395,7 +542,23 @@ def run_training(
     representative_eval_summary: dict[str, Any] = {}
 
     for ep in range(eval_episodes):
-        s, info = env.reset(seed=seed + 1000 + ep)
+        eval_opts = _resolve_reset_options("eval", ep)
+        s, info = env.reset(seed=seed + 1000 + ep, options=eval_opts)
+        if ep < 3:
+            eval_reset_checks.append(
+                {
+                    "episode": ep,
+                    "preset_name": str(info.get("preset_name", "")),
+                    "mean_power": float(np.mean(s[0:3])),
+                    "mean_comm": float(np.mean(s[3:6])),
+                    "mean_road": float(np.mean(s[6:9])),
+                    "mean_critical": float(np.mean(s[9:12])),
+                    "backbone_mean": float(np.mean(s[12:15])),
+                    "material_stock": float(s[20]),
+                    "switching_capability": float(s[21]),
+                    "stage_indicator": float(s[22]),
+                }
+            )
         total = 0.0
         ep_steps = 0
         ep_invalid = 0
@@ -409,12 +572,20 @@ def run_training(
         for step_idx in range(max_steps_per_episode):
             rs = _effective_state(_call_revise(revise_state_fn, s, info), max_revised_dim)
             valid_mask = _valid_action_mask(action_dim, info)
+            valid_actions = np.where(valid_mask)[0]
+            if valid_actions.size == 0:
+                if action_dim > 14:
+                    valid_mask[14] = True
+                else:
+                    raise RuntimeError("No feasible action during eval and no wait action is available.")
             with torch.no_grad():
                 qvals = q_net(torch.tensor(rs, dtype=torch.float32).unsqueeze(0))
                 qarr = qvals.squeeze(0).cpu().numpy()
                 qarr[~valid_mask] = -1e9
                 a = int(np.argmax(qarr))
             eval_action_usage[str(a)] += 1
+            if a == 14:
+                eval_total_wait_count += 1
             ns, ext_r, terminated, truncated, info = env.step(a)
             total += float(ext_r)
             ep_steps += 1
@@ -453,6 +624,9 @@ def run_training(
 
         eval_rewards.append(total)
         eval_steps_per_episode.append(ep_steps)
+        eval_total_steps += ep_steps
+        eval_total_invalid_count += ep_invalid
+        eval_total_violation_count += ep_violate
         eval_terminated_count += int(bool(terminated))
         eval_truncated_count += int(bool(truncated))
         comm_scores.append(float(info.get("communication_recovery_ratio", 0.0)))
@@ -498,7 +672,7 @@ def run_training(
 
     total_actions = max(1, sum(action_usage.values()))
     action_usage_norm = {k: v / total_actions for k, v in action_usage.items()}
-    action_category_usage = {"road": 0.0, "power": 0.0, "comm": 0.0, "mes": 0.0, "feeder": 0.0, "coordinated": 0.0}
+    action_category_usage = {"road": 0.0, "power": 0.0, "comm": 0.0, "mes": 0.0, "feeder": 0.0, "coordinated": 0.0, "wait": 0.0}
     for a_str, frac in action_usage_norm.items():
         action_category_usage[_action_category(int(a_str))] += float(frac)
     dominant_action_category = max(action_category_usage.items(), key=lambda kv: kv[1])[0]
@@ -510,6 +684,19 @@ def run_training(
         float(np.mean(road_scores)) if road_scores else 0.0,
         float(np.mean(crit_scores)) if crit_scores else 0.0,
     )
+
+    eval_violation_rate = float(eval_total_violation_count) / float(max(1, eval_total_steps))
+    eval_invalid_rate = float(eval_total_invalid_count) / float(max(1, eval_total_steps))
+    eval_wait_rate = float(eval_total_wait_count) / float(max(1, eval_total_steps))
+    if episode_lipschitz_vectors:
+        lips_mat = np.asarray(episode_lipschitz_vectors, dtype=np.float32)
+        lips_mean_vec = np.nan_to_num(np.mean(lips_mat, axis=0), nan=0.0, posinf=1e3, neginf=0.0)
+    else:
+        lips_mean_vec = np.zeros(state_dim, dtype=np.float32)
+    lips_final_vec = np.nan_to_num(smoothed_lipschitz_vector, nan=0.0, posinf=1e3, neginf=0.0)
+    lipschitz_mean = float(np.mean(lips_final_vec)) if lips_final_vec.size else 0.0
+    lipschitz_max = float(np.max(lips_final_vec)) if lips_final_vec.size else 0.0
+    lipschitz_min = float(np.min(lips_final_vec)) if lips_final_vec.size else 0.0
 
     result = {
         "episode_rewards": episode_rewards,
@@ -525,12 +712,17 @@ def run_training(
         "critical_load_shortfall": float(max(0.0, 1.0 - (float(np.mean(crit_scores)) if crit_scores else 0.0))),
         "recovery_completion_time": float(np.mean(completion_steps)) if completion_steps else float(max_steps_per_episode),
         "cumulative_reward_mean": float(np.mean(episode_rewards)) if episode_rewards else 0.0,
-        "constraint_violation_count": int(violations),
-        "constraint_violation_rate": float(np.mean(eval_violation_rates)) if eval_violation_rates else 0.0,
-        "constraint_violation_rate_eval": float(np.mean(eval_violation_rates)) if eval_violation_rates else 0.0,
+        "constraint_violation_count": int(eval_total_violation_count),
+        "constraint_violation_rate": eval_violation_rate,
+        "constraint_violation_rate_eval": eval_violation_rate,
+        "train_constraint_violation_count": int(violations),
         "train_constraint_violation_rate": float(violations) / float(max(1, train_total_steps)),
-        "invalid_action_rate": float(np.mean(eval_invalid_rates)) if eval_invalid_rates else 0.0,
-        "invalid_action_rate_eval": float(np.mean(eval_invalid_rates)) if eval_invalid_rates else 0.0,
+        "invalid_action_count_eval": int(eval_total_invalid_count),
+        "invalid_action_rate": eval_invalid_rate,
+        "invalid_action_rate_eval": eval_invalid_rate,
+        "wait_hold_count_eval": int(eval_total_wait_count),
+        "wait_hold_usage_eval": eval_wait_rate,
+        "wait_hold_usage": eval_wait_rate,
         "mean_progress_delta_eval": float(np.mean(eval_progress_deltas)) if eval_progress_deltas else 0.0,
         "mean_progress_delta": float(np.mean(eval_progress_deltas)) if eval_progress_deltas else 0.0,
         "mean_stage_indicator_eval": float(np.mean(eval_stage_indicators)) if eval_stage_indicators else 0.0,
@@ -597,11 +789,37 @@ def run_training(
                 k: v / float(max(1, sum(eval_action_usage.values()))) for k, v in eval_action_usage.items()
             },
         },
+        "training_reset_checks": training_reset_checks,
+        "eval_reset_checks": eval_reset_checks,
+        "episode_lipschitz_vector": [float(x) for x in last_episode_lipschitz_vector.tolist()],
+        "episode_lipschitz_vectors": episode_lipschitz_vectors,
+        "smoothed_lipschitz_vector": [float(x) for x in lips_final_vec.tolist()],
+        "lipschitz_vector_final": [float(x) for x in lips_final_vec.tolist()],
+        "lipschitz_vector_mean": [float(x) for x in lips_mean_vec.tolist()],
+        "lipschitz_top_stable_dims": _top_lipschitz_dims(lips_mean_vec, top_k=3, reverse=False),
+        "lipschitz_top_unstable_dims": _top_lipschitz_dims(lips_mean_vec, top_k=3, reverse=True),
+        "lipschitz_mean": float(lipschitz_mean),
+        "lipschitz_max": float(lipschitz_max),
+        "lipschitz_min": float(lipschitz_min),
+        "lipschitz_low_sample_episodes": int(lipschitz_low_sample_episodes),
+        "lipschitz_estimation_pair_count_mean": float(np.mean(lipschitz_pair_counts)) if lipschitz_pair_counts else 0.0,
     }
 
     weights_cfg = task_mode_metric_weights or {}
     result["selection_score"] = _selection_score(result, weights_cfg=weights_cfg)
     result["selection_metric_used"] = "global_objective_score"
+
+    # Internal consistency guard for eval count/rate metrics.
+    if eval_total_steps > 0:
+        expected_violation_rate = float(result["constraint_violation_count"]) / float(eval_total_steps)
+        expected_invalid_rate = float(result["invalid_action_count_eval"]) / float(eval_total_steps)
+        if abs(expected_violation_rate - float(result["constraint_violation_rate_eval"])) > 1e-9:
+            raise RuntimeError("Metrics consistency error: constraint_violation_count vs constraint_violation_rate_eval mismatch.")
+        if abs(expected_invalid_rate - float(result["invalid_action_rate_eval"])) > 1e-9:
+            raise RuntimeError("Metrics consistency error: invalid_action_count_eval vs invalid_action_rate_eval mismatch.")
+        expected_wait_rate = float(result["wait_hold_count_eval"]) / float(eval_total_steps)
+        if abs(expected_wait_rate - float(result["wait_hold_usage_eval"])) > 1e-9:
+            raise RuntimeError("Metrics consistency error: wait_hold_count_eval vs wait_hold_usage_eval mismatch.")
 
     output_json_path.parent.mkdir(parents=True, exist_ok=True)
     output_json_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
@@ -614,7 +832,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Lightweight DQN trainer for project recovery env.")
     parser.add_argument("--env", default="project_recovery")
     parser.add_argument("--revise-module", default="")
-    parser.add_argument("--task-mode", default="coordinated_restoration")
+    parser.add_argument("--task-mode", default="global_efficiency_priority")
     parser.add_argument("--llm-mode", default="real")
     parser.add_argument("--config", default="config.yaml")
     parser.add_argument("--output", default="outputs/rl_result.json")
