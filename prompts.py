@@ -22,6 +22,12 @@ Observation schema summary:
 Planning blueprint JSON:
 {planning_json}
 Generate one module that improves policy state representation and intrinsic shaping for this 24D state.
+Hard constraints for revise_state:
+- output must always be 1-D with constant length across inputs
+- output length must always be >= 24
+- keep the original 24 raw dimensions intact (do not drop/reorder/compress them)
+- you may append only a small number of summary features (target: 0-6 appended dims)
+- do NOT return a subset of state and do NOT compress to fewer than 24 dims
 Prioritize system-level recovery over single-layer gains:
 - critical load recovery and completion progress
 - balanced tri-layer recovery across zones
@@ -31,8 +37,11 @@ Prioritize system-level recovery over single-layer gains:
 - do not overuse feeder/coordinated actions when prerequisites are weak (e.g., low mes_soc, low backbone_comm, low material)
 - prioritize low-violation completion in late-stage finishing
 - include explicit signals to reach late stage and complete restoration
-- intrinsic reward should be small, dense, and progress-oriented
+- intrinsic reward should be small, dense, progress-oriented, and smooth
+- prefer mostly delta-based terms (state improvement / progress deltas)
+- avoid many hard thresholds and branch-heavy logic
 - do not duplicate invalid-action / constraint / wait penalties already handled elsewhere
+- avoid large constant bonuses/penalties and avoid overly aggressive late-stage shaping
 - do not reward conservative inaction
 Only output code with revise_state and intrinsic_reward (no extra dependencies/modules).
 Keep code short and robust (target <= 45 lines).
@@ -91,4 +100,6 @@ Rules:
 - Keep each list concise (0-4 items, short phrases only).
 - Confidence must be a float in [0, 1].
 - Keep output brief and operational, avoid long explanations.
+- Use Lipschitz smoothness summary when provided: keep informative low-sensitivity signals and reduce unstable high-sensitivity state-reward mappings.
+- If smoothness is poor, prioritize stabilizing reward shaping over adding more aggressive bonuses.
 """

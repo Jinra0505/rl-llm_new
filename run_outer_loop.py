@@ -159,6 +159,7 @@ def _semantic_validate_candidate(code: str, max_revised_dim: int | None = None) 
     ]
     revised_lens: list[int] = []
     revised_samples: list[np.ndarray] = []
+    max_abs_appended = 0.0
     for idx, (state, info) in enumerate(synth_inputs):
         try:
             rs = revise_state(state, info)
@@ -187,10 +188,17 @@ def _semantic_validate_candidate(code: str, max_revised_dim: int | None = None) 
                 f"Semantic validation: revise_state output exceeds max_revised_dim on sample {idx} ({arr.shape[0]} > {max_revised_dim})"
             )
         revised_lens.append(int(arr.shape[0]))
+        if arr.shape[0] > state.shape[0]:
+            appended = arr[state.shape[0] :]
+            max_abs_appended = max(max_abs_appended, float(np.max(np.abs(appended))) if appended.size else 0.0)
         revised_samples.append(arr)
 
     if revised_lens and len(set(revised_lens)) != 1:
         errors.append(f"Semantic validation: revise_state output length is not stable across inputs: {revised_lens}")
+    if revised_lens and min(revised_lens) < 24:
+        errors.append(f"Semantic validation: revise_state output length must be >= 24, got {revised_lens}")
+    if max_abs_appended > 5.0:
+        errors.append(f"Semantic validation: appended revise_state features are too large (max_abs={max_abs_appended:.4f})")
 
     for idx, (state, info) in enumerate(synth_inputs):
         if idx >= len(revised_samples):
@@ -218,7 +226,7 @@ def _semantic_validate_candidate(code: str, max_revised_dim: int | None = None) 
         if not np.isfinite(ir_f):
             errors.append(f"Semantic validation: intrinsic_reward returned NaN/inf on sample {idx}")
             continue
-        if abs(ir_f) > 20.0:
+        if abs(ir_f) > 5.0:
             errors.append(f"Semantic validation: intrinsic_reward magnitude too large on sample {idx}: {ir_f}")
 
     return errors
@@ -266,6 +274,16 @@ def validate_candidate_payload(payload: dict[str, Any], max_revised_dim: int | N
                 elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
                     if node.func.id in FORBIDDEN_CALLS:
                         errors.append(f"Forbidden call: {node.func.id}")
+            intrinsic_nodes = [
+                n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "intrinsic_reward"
+            ]
+            if intrinsic_nodes:
+                intrinsic_fn = intrinsic_nodes[0]
+                branch_count = sum(isinstance(n, (ast.If, ast.IfExp)) for n in ast.walk(intrinsic_fn))
+                if branch_count > 8:
+                    errors.append(
+                        f"Semantic validation: intrinsic_reward is too branch-heavy ({branch_count} conditional branches > 8)."
+                    )
         except Exception as exc:  # noqa: BLE001
             errors.append(f"Code validation error: {exc}")
 
@@ -473,6 +491,33 @@ def build_feedback(
         k: float(_safe_float(candidate_core.get(k, 0.0)) - _safe_float(baseline_core.get(k, 0.0)))
         for k in core_keys
     }
+    lipschitz_keys = ["lipschitz_mean", "lipschitz_max", "lipschitz_min"]
+    candidate_lipschitz = {k: _safe_float(metrics.get(k, 0.0)) for k in lipschitz_keys}
+    baseline_lipschitz = {k: _safe_float(reference_metrics.get(k, 0.0)) for k in lipschitz_keys}
+    lipschitz_delta = {k: float(candidate_lipschitz[k] - baseline_lipschitz[k]) for k in lipschitz_keys}
+    candidate_lipschitz.update(
+        {
+            "top_unstable_dims": metrics.get("lipschitz_top_unstable_dims", [])[:3]
+            if isinstance(metrics.get("lipschitz_top_unstable_dims"), list)
+            else [],
+            "top_stable_dims": metrics.get("lipschitz_top_stable_dims", [])[:3]
+            if isinstance(metrics.get("lipschitz_top_stable_dims"), list)
+            else [],
+            "low_sample_episodes": int(_safe_float(metrics.get("lipschitz_low_sample_episodes", 0))),
+        }
+    )
+    baseline_lipschitz.update(
+        {
+            "top_unstable_dims": reference_metrics.get("lipschitz_top_unstable_dims", [])[:3]
+            if isinstance(reference_metrics.get("lipschitz_top_unstable_dims"), list)
+            else [],
+            "top_stable_dims": reference_metrics.get("lipschitz_top_stable_dims", [])[:3]
+            if isinstance(reference_metrics.get("lipschitz_top_stable_dims"), list)
+            else [],
+        }
+    )
+    if candidate_lipschitz["lipschitz_mean"] > 1.0:
+        hints.append("State-reward smoothness appears unstable (high Lipschitz mean).")
 
     return {
         "task_mode": str(best_candidate.get("task_mode", metrics.get("task_mode_used", ""))),
@@ -481,6 +526,9 @@ def build_feedback(
         "candidate_core_metrics": candidate_core,
         "baseline_core_metrics": baseline_core,
         "candidate_vs_baseline_delta": core_delta,
+        "lipschitz_candidate_summary": candidate_lipschitz,
+        "lipschitz_baseline_summary": baseline_lipschitz,
+        "lipschitz_candidate_vs_baseline_delta": lipschitz_delta,
         "failure_mode_hints": hints,
         "has_violation": bool(_safe_float(metrics.get("constraint_violation_rate_eval", 0.0)) > 0.0),
         "has_invalid_action": bool(_safe_float(metrics.get("invalid_action_rate_eval", 0.0)) > 0.0),
@@ -836,6 +884,13 @@ def main() -> None:
                         "\nThe 'code' field must be a valid Python source string with escaped newlines, "
                         "and must parse successfully."
                     )
+                    attempt_prompt += (
+                        "\nRetry hard constraints:"
+                        "\n- revise_state must include original 24D raw state (no compression/subset)."
+                        "\n- revise_state output must be fixed-length and never shorter than 24."
+                        "\n- prefer simple appended summary features over handcrafted compression."
+                        "\n- intrinsic_reward must be smooth, conservative, mostly delta-based, and small magnitude."
+                    )
                     attempt_prompt += "\nPrevious validation errors: " + json.dumps(report.get("errors", []), ensure_ascii=False)
                 try:
                     raw = client.chat(
@@ -966,6 +1021,8 @@ def main() -> None:
                     "best_candidate_metrics": feedback_payload.get("candidate_core_metrics", {}),
                     "baseline_metrics": feedback_payload.get("baseline_core_metrics", {}),
                     "delta_vs_baseline": feedback_payload.get("candidate_vs_baseline_delta", {}),
+                    "lipschitz_summary": feedback_payload.get("lipschitz_candidate_summary", {}),
+                    "lipschitz_delta_vs_baseline": feedback_payload.get("lipschitz_candidate_vs_baseline_delta", {}),
                     "planning_summary": feedback_payload.get("planning_summary", {}),
                 }
                 try:
@@ -993,6 +1050,10 @@ def main() -> None:
                     "task_mode": feedback_payload.get("task_mode", ""),
                     "best_candidate_metrics": feedback_payload.get("best_candidate_metrics", feedback_payload.get("candidate_core_metrics", {})),
                     "delta_vs_baseline": feedback_payload.get("delta_vs_baseline", feedback_payload.get("candidate_vs_baseline_delta", {})),
+                    "lipschitz_summary": feedback_payload.get("lipschitz_summary", feedback_payload.get("lipschitz_candidate_summary", {})),
+                    "lipschitz_delta_vs_baseline": feedback_payload.get(
+                        "lipschitz_delta_vs_baseline", feedback_payload.get("lipschitz_candidate_vs_baseline_delta", {})
+                    ),
                     "planning_summary": feedback_payload.get("planning_summary", {}),
                 }
                 try:
@@ -1053,8 +1114,16 @@ def main() -> None:
             "critical_load_recovery_ratio": float(best_candidate["metrics"].get("critical_load_recovery_ratio", 0.0)),
             "constraint_violation_rate_eval": float(best_candidate["metrics"].get("constraint_violation_rate_eval", 0.0)),
             "mean_progress_delta_eval": float(best_candidate["metrics"].get("mean_progress_delta_eval", 0.0)),
+            "lipschitz_mean": float(best_candidate["metrics"].get("lipschitz_mean", 0.0)),
+            "lipschitz_max": float(best_candidate["metrics"].get("lipschitz_max", 0.0)),
+            "lipschitz_min": float(best_candidate["metrics"].get("lipschitz_min", 0.0)),
             "best_candidate": best_candidate,
             "feedback_payload": feedback_payload,
+            "lipschitz_feedback_summary": {
+                "candidate": feedback_payload.get("lipschitz_candidate_summary", {}),
+                "baseline": feedback_payload.get("lipschitz_baseline_summary", {}),
+                "delta": feedback_payload.get("lipschitz_candidate_vs_baseline_delta", {}),
+            },
             "router_source": "llm",
             "planning_source": "llm",
             "feedback_source": "llm",

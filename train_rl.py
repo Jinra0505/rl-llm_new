@@ -181,6 +181,47 @@ def _selection_score(metrics: dict[str, Any], weights_cfg: dict[str, Any]) -> fl
     return float(sum(float(w) * float(metrics.get(k, 0.0)) for k, w in weights.items()))
 
 
+def _estimate_episode_lipschitz_vector(
+    episode_states: list[np.ndarray],
+    episode_rewards: list[float],
+    state_dim: int,
+    eps: float = 1e-4,
+    ratio_clip: float = 1e3,
+    min_pairs: int = 3,
+) -> tuple[np.ndarray, bool, int]:
+    if len(episode_states) < 2 or len(episode_rewards) < 2:
+        return np.zeros(state_dim, dtype=np.float32), True, 0
+
+    pair_ratios: list[np.ndarray] = []
+    max_idx = min(len(episode_states), len(episode_rewards))
+    for idx in range(1, max_idx):
+        ds = np.abs(np.asarray(episode_states[idx], dtype=np.float32) - np.asarray(episode_states[idx - 1], dtype=np.float32))
+        dr = abs(float(episode_rewards[idx]) - float(episode_rewards[idx - 1]))
+        ratios = dr / np.maximum(ds, eps)
+        ratios = np.clip(ratios, 0.0, ratio_clip)
+        pair_ratios.append(ratios.astype(np.float32))
+
+    pair_count = len(pair_ratios)
+    if pair_count < min_pairs:
+        return np.zeros(state_dim, dtype=np.float32), True, pair_count
+
+    mat = np.stack(pair_ratios, axis=0)
+    vec = np.median(mat, axis=0).astype(np.float32)
+    vec = np.nan_to_num(vec, nan=0.0, posinf=ratio_clip, neginf=0.0)
+    return vec, False, pair_count
+
+
+def _top_lipschitz_dims(vec: np.ndarray, top_k: int = 3, reverse: bool = True) -> list[dict[str, Any]]:
+    if vec.size == 0:
+        return []
+    order = np.argsort(vec)
+    chosen = order[::-1][:top_k] if reverse else order[:top_k]
+    out: list[dict[str, Any]] = []
+    for idx in chosen.tolist():
+        out.append({"dim": int(idx), "value": float(vec[idx])})
+    return out
+
+
 def run_training(
     revise_module_path: Path | None,
     env_name: str,
@@ -264,6 +305,13 @@ def run_training(
     training_reset_checks: list[dict[str, Any]] = []
     eval_reset_checks: list[dict[str, Any]] = []
 
+    episode_lipschitz_vectors: list[list[float]] = []
+    lipschitz_low_sample_episodes = 0
+    lipschitz_pair_counts: list[int] = []
+    lipschitz_smooth_beta = 0.20
+    smoothed_lipschitz_vector = np.zeros(state_dim, dtype=np.float32)
+    last_episode_lipschitz_vector = np.zeros(state_dim, dtype=np.float32)
+
     for ep in range(train_episodes):
         train_opts = _resolve_reset_options("train", ep)
         s, info = env.reset(seed=seed + ep, options=train_opts)
@@ -286,6 +334,8 @@ def run_training(
         ep_violation_count = 0
         mid_stagnation_steps = 0
         mid_wait_streak = 0
+        episode_effective_states: list[np.ndarray] = []
+        episode_composite_rewards: list[float] = []
 
         for step in range(max_steps_per_episode):
             rs = _effective_state(_call_revise(revise_state_fn, s, info), max_revised_dim)
@@ -364,7 +414,7 @@ def run_training(
             if intrinsic_mode in {"off", "state_only"}:
                 effective_ir = 0.0
             else:
-                effective_ir = float(intrinsic_scale) * float(ir)
+                effective_ir = float(np.clip(float(intrinsic_scale) * float(ir), -0.30, 0.30))
             r = float(
                 ext_r
                 + effective_ir
@@ -392,6 +442,8 @@ def run_training(
                 - repeated_wait_penalty
             )
             done = bool(terminated or truncated)
+            episode_effective_states.append(np.asarray(rs, dtype=np.float32))
+            episode_composite_rewards.append(float(r))
 
             nrs = _effective_state(_call_revise(revise_state_fn, ns, info), max_revised_dim)
             replay.add(rs, a, r, nrs, done)
@@ -433,6 +485,16 @@ def run_training(
                 break
 
         episode_rewards.append(ep_reward)
+        ep_lips_vec, low_sample, pair_count = _estimate_episode_lipschitz_vector(
+            episode_states=episode_effective_states,
+            episode_rewards=episode_composite_rewards,
+            state_dim=state_dim,
+        )
+        lipschitz_low_sample_episodes += int(low_sample)
+        lipschitz_pair_counts.append(int(pair_count))
+        smoothed_lipschitz_vector = (1.0 - lipschitz_smooth_beta) * smoothed_lipschitz_vector + lipschitz_smooth_beta * ep_lips_vec
+        last_episode_lipschitz_vector = ep_lips_vec
+        episode_lipschitz_vectors.append([float(x) for x in ep_lips_vec.tolist()])
 
     # Evaluation (greedy)
     eval_backbone_comm: list[float] = []
@@ -626,6 +688,15 @@ def run_training(
     eval_violation_rate = float(eval_total_violation_count) / float(max(1, eval_total_steps))
     eval_invalid_rate = float(eval_total_invalid_count) / float(max(1, eval_total_steps))
     eval_wait_rate = float(eval_total_wait_count) / float(max(1, eval_total_steps))
+    if episode_lipschitz_vectors:
+        lips_mat = np.asarray(episode_lipschitz_vectors, dtype=np.float32)
+        lips_mean_vec = np.nan_to_num(np.mean(lips_mat, axis=0), nan=0.0, posinf=1e3, neginf=0.0)
+    else:
+        lips_mean_vec = np.zeros(state_dim, dtype=np.float32)
+    lips_final_vec = np.nan_to_num(smoothed_lipschitz_vector, nan=0.0, posinf=1e3, neginf=0.0)
+    lipschitz_mean = float(np.mean(lips_final_vec)) if lips_final_vec.size else 0.0
+    lipschitz_max = float(np.max(lips_final_vec)) if lips_final_vec.size else 0.0
+    lipschitz_min = float(np.min(lips_final_vec)) if lips_final_vec.size else 0.0
 
     result = {
         "episode_rewards": episode_rewards,
@@ -720,6 +791,18 @@ def run_training(
         },
         "training_reset_checks": training_reset_checks,
         "eval_reset_checks": eval_reset_checks,
+        "episode_lipschitz_vector": [float(x) for x in last_episode_lipschitz_vector.tolist()],
+        "episode_lipschitz_vectors": episode_lipschitz_vectors,
+        "smoothed_lipschitz_vector": [float(x) for x in lips_final_vec.tolist()],
+        "lipschitz_vector_final": [float(x) for x in lips_final_vec.tolist()],
+        "lipschitz_vector_mean": [float(x) for x in lips_mean_vec.tolist()],
+        "lipschitz_top_stable_dims": _top_lipschitz_dims(lips_mean_vec, top_k=3, reverse=False),
+        "lipschitz_top_unstable_dims": _top_lipschitz_dims(lips_mean_vec, top_k=3, reverse=True),
+        "lipschitz_mean": float(lipschitz_mean),
+        "lipschitz_max": float(lipschitz_max),
+        "lipschitz_min": float(lipschitz_min),
+        "lipschitz_low_sample_episodes": int(lipschitz_low_sample_episodes),
+        "lipschitz_estimation_pair_count_mean": float(np.mean(lipschitz_pair_counts)) if lipschitz_pair_counts else 0.0,
     }
 
     weights_cfg = task_mode_metric_weights or {}
