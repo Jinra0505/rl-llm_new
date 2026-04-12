@@ -6,6 +6,112 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
+PRESET_LIBRARY: dict[str, dict[str, Any]] = {
+    "critical_load_dominant": {
+        "power": [0.48, 0.52, 0.49],
+        "comm": [0.58, 0.60, 0.57],
+        "road": [0.57, 0.58, 0.56],
+        "critical": [0.45, 0.42, 0.43],
+        "backbone": [0.55, 0.60, 0.58],
+        "mes_soc": 0.58,
+        "material": 0.38,
+        "switching": 0.62,
+    },
+    "capability_bottleneck_dominant": {
+        "power": [0.55, 0.58, 0.56],
+        "comm": [0.50, 0.52, 0.51],
+        "road": [0.40, 0.42, 0.41],
+        "critical": [0.66, 0.64, 0.63],
+        "backbone": [0.47, 0.45, 0.44],
+        "mes_soc": 0.52,
+        "material": 0.18,
+        "switching": 0.48,
+    },
+    "global_finishing_dominant": {
+        "power": [0.72, 0.73, 0.71],
+        "comm": [0.70, 0.72, 0.71],
+        "road": [0.69, 0.70, 0.68],
+        "critical": [0.85, 0.87, 0.86],
+        "backbone": [0.74, 0.73, 0.72],
+        "mes_soc": 0.60,
+        "material": 0.33,
+        "switching": 0.72,
+    },
+    "uncertain_boundary_case_u1": {
+        "power": [0.53, 0.54, 0.52],
+        "comm": [0.45, 0.47, 0.46],
+        "road": [0.39, 0.41, 0.40],
+        "critical": [0.62, 0.60, 0.58],
+        "backbone": [0.43, 0.44, 0.42],
+        "mes_soc": 0.50,
+        "material": 0.15,
+        "switching": 0.46,
+    },
+    "uncertain_boundary_case_u2": {
+        "power": [0.50, 0.51, 0.49],
+        "comm": [0.56, 0.57, 0.55],
+        "road": [0.55, 0.56, 0.54],
+        "critical": [0.54, 0.52, 0.51],
+        "backbone": [0.57, 0.58, 0.56],
+        "mes_soc": 0.62,
+        "material": 0.34,
+        "switching": 0.63,
+    },
+    "definition_shift_case_d1": {
+        "power": [0.69, 0.70, 0.68],
+        "comm": [0.67, 0.69, 0.68],
+        "road": [0.65, 0.67, 0.66],
+        "critical": [0.83, 0.84, 0.82],
+        "backbone": [0.70, 0.69, 0.68],
+        "mes_soc": 0.59,
+        "material": 0.31,
+        "switching": 0.70,
+    },
+    "definition_shift_case_d2": {
+        "power": [0.57, 0.58, 0.56],
+        "comm": [0.30, 0.33, 0.31],
+        "road": [0.28, 0.30, 0.29],
+        "critical": [0.70, 0.71, 0.69],
+        "backbone": [0.32, 0.34, 0.31],
+        "mes_soc": 0.55,
+        "material": 0.24,
+        "switching": 0.40,
+    },
+}
+
+PRESET_GROUPS: dict[str, list[str]] = {
+    "critical_load_presets": ["critical_load_dominant"],
+    "capability_bottleneck_presets": ["capability_bottleneck_dominant"],
+    "global_finishing_presets": ["global_finishing_dominant"],
+    "uncertain_boundary_presets": ["uncertain_boundary_case_u1", "uncertain_boundary_case_u2"],
+    "definition_shift_presets": ["definition_shift_case_d1", "definition_shift_case_d2"],
+}
+
+BENCHMARK_SPLITS: dict[str, list[str]] = {
+    "benchmark_train_presets": [
+        "critical_load_dominant",
+        "capability_bottleneck_dominant",
+        "global_finishing_dominant",
+    ],
+    "benchmark_eval_presets": [
+        "critical_load_dominant",
+        "global_finishing_dominant",
+    ],
+    "benchmark_uncertain_presets": [
+        "uncertain_boundary_case_u1",
+        "uncertain_boundary_case_u2",
+    ],
+    "benchmark_definition_shift_presets": [
+        "definition_shift_case_d1",
+        "definition_shift_case_d2",
+    ],
+    "benchmark_stress_presets": [
+        "capability_bottleneck_dominant",
+        "definition_shift_case_d2",
+        "uncertain_boundary_case_u1",
+    ],
+}
+
 
 class ProjectRecoveryEnv(gym.Env):
     """Project-grade reduced-order zonal tri-layer coupled recovery environment.
@@ -68,6 +174,11 @@ class ProjectRecoveryEnv(gym.Env):
         self.constraint_violation_count = 0
         self.prev_action = 13
         self.prev_action_category = "coordinated"
+        self.last_preset_name = ""
+        self.last_preset_group = ""
+        self.last_benchmark_mode = "off"
+        self.last_split_name = ""
+        self.last_reset_severity = severity
 
     def _severity_profile(self) -> tuple[tuple[float, float], float]:
         if self.severity == "mild":
@@ -108,90 +219,33 @@ class ProjectRecoveryEnv(gym.Env):
             return "wait"
         return "coordinated"
 
-    def _apply_preset(self, s: np.ndarray, preset_name: str, jitter: float = 0.0) -> np.ndarray:
-        presets: dict[str, dict[str, Any]] = {
-            "critical_load_dominant": {
-                "power": [0.48, 0.52, 0.49],
-                "comm": [0.58, 0.60, 0.57],
-                "road": [0.57, 0.58, 0.56],
-                "critical": [0.45, 0.42, 0.43],
-                "backbone": [0.55, 0.60, 0.58],
-                "mes_soc": 0.58,
-                "material": 0.38,
-                "switching": 0.62,
-            },
-            "capability_bottleneck_dominant": {
-                "power": [0.55, 0.58, 0.56],
-                "comm": [0.50, 0.52, 0.51],
-                "road": [0.40, 0.42, 0.41],
-                "critical": [0.66, 0.64, 0.63],
-                "backbone": [0.47, 0.45, 0.44],
-                "mes_soc": 0.52,
-                "material": 0.18,
-                "switching": 0.48,
-            },
-            "global_finishing_dominant": {
-                "power": [0.72, 0.73, 0.71],
-                "comm": [0.70, 0.72, 0.71],
-                "road": [0.69, 0.70, 0.68],
-                "critical": [0.85, 0.87, 0.86],
-                "backbone": [0.74, 0.73, 0.72],
-                "mes_soc": 0.60,
-                "material": 0.33,
-                "switching": 0.72,
-            },
-            "uncertain_boundary_case_u1": {
-                "power": [0.53, 0.54, 0.52],
-                "comm": [0.45, 0.47, 0.46],
-                "road": [0.39, 0.41, 0.40],
-                "critical": [0.62, 0.60, 0.58],
-                "backbone": [0.43, 0.44, 0.42],
-                "mes_soc": 0.50,
-                "material": 0.15,
-                "switching": 0.46,
-            },
-            "uncertain_boundary_case_u2": {
-                "power": [0.50, 0.51, 0.49],
-                "comm": [0.56, 0.57, 0.55],
-                "road": [0.55, 0.56, 0.54],
-                "critical": [0.54, 0.52, 0.51],
-                "backbone": [0.57, 0.58, 0.56],
-                "mes_soc": 0.62,
-                "material": 0.34,
-                "switching": 0.63,
-            },
-            "definition_shift_case_d1": {
-                "power": [0.69, 0.70, 0.68],
-                "comm": [0.67, 0.69, 0.68],
-                "road": [0.65, 0.67, 0.66],
-                "critical": [0.83, 0.84, 0.82],
-                "backbone": [0.70, 0.69, 0.68],
-                "mes_soc": 0.59,
-                "material": 0.31,
-                "switching": 0.70,
-            },
-            "definition_shift_case_d2": {
-                "power": [0.57, 0.58, 0.56],
-                "comm": [0.30, 0.33, 0.31],
-                "road": [0.28, 0.30, 0.29],
-                "critical": [0.70, 0.71, 0.69],
-                "backbone": [0.32, 0.34, 0.31],
-                "mes_soc": 0.55,
-                "material": 0.24,
-                "switching": 0.40,
-            },
-        }
-        if preset_name not in presets:
+    def _resolve_preset_pool(self, preset_group: str, split_name: str) -> tuple[list[str], str]:
+        if split_name and split_name in BENCHMARK_SPLITS:
+            return list(BENCHMARK_SPLITS[split_name]), split_name
+        if preset_group and preset_group in PRESET_GROUPS:
+            return list(PRESET_GROUPS[preset_group]), ""
+        return [], ""
+
+    def _severity_shift(self, severity: str) -> float:
+        if severity == "mild":
+            return 0.08
+        if severity == "severe":
+            return -0.10
+        return 0.0
+
+    def _apply_preset(self, s: np.ndarray, preset_name: str, severity: str, jitter: float = 0.0) -> np.ndarray:
+        if preset_name not in PRESET_LIBRARY:
             return s
-        p = presets[preset_name]
-        s[0:3] = np.asarray(p["power"], dtype=np.float32)
-        s[3:6] = np.asarray(p["comm"], dtype=np.float32)
-        s[6:9] = np.asarray(p["road"], dtype=np.float32)
-        s[9:12] = np.asarray(p["critical"], dtype=np.float32)
-        s[12:15] = np.asarray(p["backbone"], dtype=np.float32)
-        s[19] = float(p["mes_soc"])
-        s[20] = float(p["material"])
-        s[21] = float(p["switching"])
+        p = PRESET_LIBRARY[preset_name]
+        shift = self._severity_shift(severity)
+        s[0:3] = np.clip(np.asarray(p["power"], dtype=np.float32) + shift, 0.0, 1.0)
+        s[3:6] = np.clip(np.asarray(p["comm"], dtype=np.float32) + shift, 0.0, 1.0)
+        s[6:9] = np.clip(np.asarray(p["road"], dtype=np.float32) + shift, 0.0, 1.0)
+        s[9:12] = np.clip(np.asarray(p["critical"], dtype=np.float32) + shift, 0.0, 1.0)
+        s[12:15] = np.clip(np.asarray(p["backbone"], dtype=np.float32) + shift, 0.0, 1.0)
+        s[19] = float(np.clip(float(p["mes_soc"]) + 0.5 * shift, 0.0, 1.0))
+        s[20] = float(np.clip(float(p["material"]) + 0.5 * shift, 0.0, 1.0))
+        s[21] = float(np.clip(float(p["switching"]) + 0.5 * shift, 0.0, 1.0))
         if jitter > 0.0:
             noise = self.rng.normal(0.0, jitter, size=15).astype(np.float32)
             s[0:15] = np.clip(s[0:15] + noise, 0.0, 1.0)
@@ -210,7 +264,11 @@ class ProjectRecoveryEnv(gym.Env):
         self.prev_action = 13
         self.prev_action_category = "coordinated"
 
+        reset_severity = str(options.get("severity", self.severity)).strip().lower() or self.severity
+        old_severity = self.severity
+        self.severity = reset_severity
         rng_range, difficulty = self._severity_profile()
+        self.severity = old_severity
         low, high = rng_range
 
         s = np.zeros(24, dtype=np.float32)
@@ -228,15 +286,31 @@ class ProjectRecoveryEnv(gym.Env):
         s[21] = self.rng.uniform(0.5, 0.9) * difficulty  # switching capability
 
         preset_name = str(options.get("preset_name", "")).strip()
+        preset_group = str(options.get("preset_group", "")).strip()
+        split_name = str(options.get("split_name", "")).strip()
+        benchmark_mode = str(options.get("benchmark_mode", "off")).strip().lower() or "off"
+        preset_pool, resolved_split = self._resolve_preset_pool(preset_group=preset_group, split_name=split_name)
+        if not preset_name and preset_pool:
+            preset_index = int(options.get("preset_index", self.rng.integers(0, len(preset_pool))))
+            preset_name = preset_pool[preset_index % len(preset_pool)]
+            if not preset_group:
+                for gname, gitems in PRESET_GROUPS.items():
+                    if preset_name in gitems:
+                        preset_group = gname
+                        break
         preset_jitter = float(options.get("preset_jitter", 0.0))
         if preset_name:
-            s = self._apply_preset(s, preset_name, jitter=preset_jitter)
+            s = self._apply_preset(s, preset_name, severity=reset_severity, jitter=preset_jitter)
         s[22], _ = self._stage(s)
         s[23] = 0.0
 
         self.state = self._clip01(s)
+        self.last_preset_name = preset_name
+        self.last_preset_group = preset_group
+        self.last_benchmark_mode = benchmark_mode
+        self.last_split_name = resolved_split or split_name
+        self.last_reset_severity = reset_severity
         info = self._build_info(progress_delta=0.0, invalid_action=False, invalid_reason="", mes_used=False)
-        info["preset_name"] = preset_name
         return self.state.copy(), info
 
     def step(self, action: int):
@@ -489,6 +563,11 @@ class ProjectRecoveryEnv(gym.Env):
             "weakest_zone": zone_map[weakest_zone],
             "weakest_layer": str(np.argmin([np.mean(s[0:3]), np.mean(s[3:6]), np.mean(s[6:9])])),
             "critical_load_shortfall": float(1.0 - np.mean(s[9:12])),
+            "preset_name": self.last_preset_name,
+            "preset_group": self.last_preset_group,
+            "benchmark_mode": self.last_benchmark_mode,
+            "split_name": self.last_split_name,
+            "severity": self.last_reset_severity,
         }
 
 

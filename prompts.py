@@ -73,6 +73,20 @@ Required keys:
 - should_avoid (array)
 - finishing_strategy
 - codegen_guidance
+Output format requirements (strict):
+- Return one compact JSON object only (no markdown, no prose outside JSON, no code fences)
+- Use exactly the required keys above
+- Expected types:
+  - weakest_layer: string
+  - weakest_zone: string
+  - late_stage_risk: short string
+  - violation_risk: short string
+  - should_reward: short array (0-6 items)
+  - should_penalize: short array (0-6 items)
+  - should_avoid: short array (0-6 items, short strings)
+  - finishing_strategy: short string
+  - codegen_guidance: short string
+- Keep all strings concise and operational; avoid long narratives
 Planning constraints:
 - avoid invalid or precondition-violating actions
 - avoid overusing feeder/coordinated actions when prerequisites are weak
@@ -85,6 +99,20 @@ Planning constraints:
 - do not duplicate invalid-action / constraint / wait penalties already handled elsewhere
 - do not reward conservative inaction
 Return JSON only.
+"""
+
+COMPACT_PLANNING_PROMPT = """Return JSON only (no markdown/code fences/prose).
+Compact planning mode: keep output minimal and short.
+Required keys (exactly):
+- weakest_layer (string)
+- weakest_zone (string)
+- should_reward (array, up to 4 short items)
+- should_avoid (array, up to 4 short items)
+- codegen_guidance (short string)
+Rules:
+- Keep every string very short and operational.
+- No long rationale text.
+- Focus only on highest-impact shaping hints for next codegen.
 """
 
 FEEDBACK_PROMPT = """Return JSON only. No markdown. No code fences. No extra text before or after JSON.
@@ -102,4 +130,5 @@ Rules:
 - Keep output brief and operational, avoid long explanations.
 - Use Lipschitz smoothness summary when provided: keep informative low-sensitivity signals and reduce unstable high-sensitivity state-reward mappings.
 - If smoothness is poor, prioritize stabilizing reward shaping over adding more aggressive bonuses.
+- Return one compact JSON object only (no markdown / no code fences / no extra commentary).
 """

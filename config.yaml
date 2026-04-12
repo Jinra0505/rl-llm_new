@@ -14,6 +14,15 @@ outer_loop:
 scenario:
   severity: moderate  # mild | moderate | severe
 
+benchmark:
+  enabled: false
+  mode: off
+  split_name: benchmark_train_presets
+  preset_group: ""
+  preset_name: ""
+  preset_jitter: 0.0
+  fixed_severity: ""
+
 env:
   name: project_recovery
   max_steps: 90
@@ -54,6 +63,10 @@ training:
 
 selection:
   higher_is_better: true
+  candidate_search_styles:
+    - conservative_safety_first
+    - balanced
+    - aggressive_recovery_first
   task_mode_metric_weights:
     __global__:
       eval_success_rate: 0.48
@@ -62,6 +75,20 @@ selection:
       mean_progress_delta_eval: 0.16
       constraint_violation_rate_eval: -0.18
       late_stage_targeted_action_rate: 0.10
+  stability_guard:
+    enabled: true
+    small_score_gain_max: 0.02
+    meaningful_score_gain_min: 0.05
+    meaningful_recovery_gain_min: 0.03
+    max_violation_regression: 0.015
+    max_invalid_regression: 0.015
+    max_lipschitz_regression: 15.0
+    max_wait_usage_regression: 0.20
+    violation_penalty_weight: 0.60
+    invalid_penalty_weight: 0.60
+    lipschitz_penalty_weight: 0.001
+    wait_penalty_weight: 0.20
+    score_gain_protection: 0.02
 
 reward_weights:
   delta_power: 0.20

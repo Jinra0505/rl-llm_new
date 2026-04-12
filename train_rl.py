@@ -240,6 +240,7 @@ def run_training(
     intrinsic_mode: str = "full",
     intrinsic_scale: float = 1.0,
     env_reset_options: dict[str, Any] | None | callable = None,
+    reward_mode: str | None = None,
 ) -> dict[str, Any]:
     if str(llm_mode).lower() != "real":
         raise RuntimeError(f"Formal run requires llm_mode=real, got: {llm_mode}")
@@ -270,6 +271,9 @@ def run_training(
     eps_start = float(dqn_cfg.get("epsilon_start", 1.0))
     eps_end = float(dqn_cfg.get("epsilon_end", 0.05))
     eps_decay_steps = int(dqn_cfg.get("epsilon_decay_steps", 5000))
+    reward_mode_resolved = str(reward_mode or dqn_cfg.get("reward_mode", "engineered")).strip().lower()
+    if reward_mode_resolved not in {"clean", "engineered"}:
+        raise ValueError(f"Unsupported reward_mode: {reward_mode_resolved}. Use 'clean' or 'engineered'.")
 
     def _resolve_reset_options(phase: str, episode_idx: int) -> dict[str, Any] | None:
         if env_reset_options is None:
@@ -304,6 +308,7 @@ def run_training(
     train_total_steps = 0
     training_reset_checks: list[dict[str, Any]] = []
     eval_reset_checks: list[dict[str, Any]] = []
+    benchmark_meta_obs: list[dict[str, str]] = []
 
     episode_lipschitz_vectors: list[list[float]] = []
     lipschitz_low_sample_episodes = 0
@@ -320,6 +325,10 @@ def run_training(
                 {
                     "episode": ep,
                     "preset_name": str(info.get("preset_name", "")),
+                    "preset_group": str(info.get("preset_group", "")),
+                    "benchmark_mode": str(info.get("benchmark_mode", "off")),
+                    "split_name": str(info.get("split_name", "")),
+                    "severity": str(info.get("severity", severity)),
                     "mean_power": float(np.mean(s[0:3])),
                     "mean_comm": float(np.mean(s[3:6])),
                     "mean_road": float(np.mean(s[6:9])),
@@ -330,12 +339,26 @@ def run_training(
                     "stage_indicator": float(s[22]),
                 }
             )
+        benchmark_meta_obs.append(
+            {
+                "preset_name": str(info.get("preset_name", "")),
+                "preset_group": str(info.get("preset_group", "")),
+                "benchmark_mode": str(info.get("benchmark_mode", "off")),
+                "split_name": str(info.get("split_name", "")),
+                "severity": str(info.get("severity", severity)),
+            }
+        )
         ep_reward = 0.0
         ep_violation_count = 0
         mid_stagnation_steps = 0
         mid_wait_streak = 0
         episode_effective_states: list[np.ndarray] = []
         episode_composite_rewards: list[float] = []
+        ep_ext_component_total = 0.0
+        ep_intrinsic_component_total = 0.0
+        ep_engineered_component_total = 0.0
+        ep_engineered_bonus_total = 0.0
+        ep_engineered_penalty_total = 0.0
 
         for step in range(max_steps_per_episode):
             rs = _effective_state(_call_revise(revise_state_fn, s, info), max_revised_dim)
@@ -415,10 +438,8 @@ def run_training(
                 effective_ir = 0.0
             else:
                 effective_ir = float(np.clip(float(intrinsic_scale) * float(ir), -0.30, 0.30))
-            r = float(
-                ext_r
-                + effective_ir
-                + 0.25 * critical_gain
+            engineered_bonus = float(
+                0.25 * critical_gain
                 + 0.32 * progress_bonus
                 + 0.20 * weak_layer_gain
                 + 0.18 * weak_zone_gain
@@ -430,20 +451,37 @@ def run_training(
                 + low_violation_finish_bonus
                 + material_buffer_bonus
                 + sustainable_progress_bonus
-                - invalid_penalty
-                - constraint_penalty
-                - coordinated_late_penalty
-                - feeder_late_penalty
-                - material_zero_penalty
-                - critical_low_material_penalty
-                - middle_stagnation_penalty
-                - severe_mid_stagnation_penalty
-                - wait_misuse_penalty
-                - repeated_wait_penalty
+            )
+            engineered_penalty = float(
+                invalid_penalty
+                + constraint_penalty
+                + coordinated_late_penalty
+                + feeder_late_penalty
+                + material_zero_penalty
+                + critical_low_material_penalty
+                + middle_stagnation_penalty
+                + severe_mid_stagnation_penalty
+                + wait_misuse_penalty
+                + repeated_wait_penalty
+            )
+            engineered_component = engineered_bonus - engineered_penalty
+            if reward_mode_resolved == "clean":
+                engineered_component = 0.0
+                engineered_bonus = 0.0
+                engineered_penalty = 0.0
+            r = float(
+                ext_r
+                + effective_ir
+                + engineered_component
             )
             done = bool(terminated or truncated)
             episode_effective_states.append(np.asarray(rs, dtype=np.float32))
             episode_composite_rewards.append(float(r))
+            ep_ext_component_total += float(ext_r)
+            ep_intrinsic_component_total += float(effective_ir)
+            ep_engineered_component_total += float(engineered_component)
+            ep_engineered_bonus_total += float(engineered_bonus)
+            ep_engineered_penalty_total += float(engineered_penalty)
 
             nrs = _effective_state(_call_revise(revise_state_fn, ns, info), max_revised_dim)
             replay.add(rs, a, r, nrs, done)
@@ -495,6 +533,11 @@ def run_training(
         smoothed_lipschitz_vector = (1.0 - lipschitz_smooth_beta) * smoothed_lipschitz_vector + lipschitz_smooth_beta * ep_lips_vec
         last_episode_lipschitz_vector = ep_lips_vec
         episode_lipschitz_vectors.append([float(x) for x in ep_lips_vec.tolist()])
+        train_component_ext_total = locals().get("train_component_ext_total", 0.0) + ep_ext_component_total
+        train_component_intrinsic_total = locals().get("train_component_intrinsic_total", 0.0) + ep_intrinsic_component_total
+        train_component_engineered_total = locals().get("train_component_engineered_total", 0.0) + ep_engineered_component_total
+        train_component_engineered_bonus_total = locals().get("train_component_engineered_bonus_total", 0.0) + ep_engineered_bonus_total
+        train_component_engineered_penalty_total = locals().get("train_component_engineered_penalty_total", 0.0) + ep_engineered_penalty_total
 
     # Evaluation (greedy)
     eval_backbone_comm: list[float] = []
@@ -549,6 +592,10 @@ def run_training(
                 {
                     "episode": ep,
                     "preset_name": str(info.get("preset_name", "")),
+                    "preset_group": str(info.get("preset_group", "")),
+                    "benchmark_mode": str(info.get("benchmark_mode", "off")),
+                    "split_name": str(info.get("split_name", "")),
+                    "severity": str(info.get("severity", severity)),
                     "mean_power": float(np.mean(s[0:3])),
                     "mean_comm": float(np.mean(s[3:6])),
                     "mean_road": float(np.mean(s[6:9])),
@@ -559,6 +606,15 @@ def run_training(
                     "stage_indicator": float(s[22]),
                 }
             )
+        benchmark_meta_obs.append(
+            {
+                "preset_name": str(info.get("preset_name", "")),
+                "preset_group": str(info.get("preset_group", "")),
+                "benchmark_mode": str(info.get("benchmark_mode", "off")),
+                "split_name": str(info.get("split_name", "")),
+                "severity": str(info.get("severity", severity)),
+            }
+        )
         total = 0.0
         ep_steps = 0
         ep_invalid = 0
@@ -697,6 +753,11 @@ def run_training(
     lipschitz_mean = float(np.mean(lips_final_vec)) if lips_final_vec.size else 0.0
     lipschitz_max = float(np.max(lips_final_vec)) if lips_final_vec.size else 0.0
     lipschitz_min = float(np.min(lips_final_vec)) if lips_final_vec.size else 0.0
+    benchmark_modes_used = sorted({str(x.get("benchmark_mode", "off")) for x in benchmark_meta_obs if x.get("benchmark_mode", "")})
+    preset_names_used = sorted({str(x.get("preset_name", "")) for x in benchmark_meta_obs if x.get("preset_name", "")})
+    preset_groups_used = sorted({str(x.get("preset_group", "")) for x in benchmark_meta_obs if x.get("preset_group", "")})
+    split_names_used = sorted({str(x.get("split_name", "")) for x in benchmark_meta_obs if x.get("split_name", "")})
+    severities_used = sorted({str(x.get("severity", severity)) for x in benchmark_meta_obs if x.get("severity", "")})
 
     result = {
         "episode_rewards": episode_rewards,
@@ -757,10 +818,20 @@ def run_training(
         "zone_C_critical_load_ratio": float(np.mean(eval_zone_C_load)) if eval_zone_C_load else 0.0,
         "task_mode_used": task_mode,
         "llm_mode_used": "real",
+        "reward_mode": reward_mode_resolved,
         "revise_module_path": str(revise_module_path),
         "policy_feature_dim_used": state_dim,
         "env_name": env_name,
         "severity": severity,
+        "benchmark_mode": benchmark_modes_used[0] if len(benchmark_modes_used) == 1 else ("mixed" if benchmark_modes_used else "off"),
+        "benchmark_modes_used": benchmark_modes_used,
+        "preset_name": preset_names_used[0] if len(preset_names_used) == 1 else "",
+        "preset_names_used": preset_names_used,
+        "preset_group": preset_groups_used[0] if len(preset_groups_used) == 1 else "",
+        "preset_groups_used": preset_groups_used,
+        "split_name": split_names_used[0] if len(split_names_used) == 1 else "",
+        "split_names_used": split_names_used,
+        "benchmark_severities_used": severities_used,
         "action_usage": action_usage_norm,
         "action_category_usage": action_category_usage,
         "dominant_action_category": dominant_action_category,
@@ -803,6 +874,13 @@ def run_training(
         "lipschitz_min": float(lipschitz_min),
         "lipschitz_low_sample_episodes": int(lipschitz_low_sample_episodes),
         "lipschitz_estimation_pair_count_mean": float(np.mean(lipschitz_pair_counts)) if lipschitz_pair_counts else 0.0,
+        "mean_ext_reward_component": float(locals().get("train_component_ext_total", 0.0)) / float(max(1, train_total_steps)),
+        "mean_intrinsic_reward_component": float(locals().get("train_component_intrinsic_total", 0.0))
+        / float(max(1, train_total_steps)),
+        "mean_engineered_reward_component": float(locals().get("train_component_engineered_total", 0.0))
+        / float(max(1, train_total_steps)),
+        "total_engineered_bonus_component": float(locals().get("train_component_engineered_bonus_total", 0.0)),
+        "total_engineered_penalty_component": float(locals().get("train_component_engineered_penalty_total", 0.0)),
     }
 
     weights_cfg = task_mode_metric_weights or {}

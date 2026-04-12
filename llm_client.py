@@ -106,6 +106,13 @@ class LLMClient:
         raw = self.chat(messages, response_kind=response_kind, sample_idx=sample_idx)
         candidates: list[str] = [raw.strip()]
         cleaned = raw.strip()
+        lo = cleaned.lower()
+        marker = "```json"
+        if marker in lo:
+            start = lo.find(marker) + len(marker)
+            end = lo.find("```", start)
+            if end != -1:
+                candidates.append(cleaned[start:end].strip())
         if cleaned.startswith("```"):
             lines = cleaned.splitlines()
             if lines and lines[0].startswith("```"):
@@ -114,9 +121,29 @@ class LLMClient:
                 lines = lines[:-1]
             candidates.append("\n".join(lines).strip())
         start = raw.find("{")
-        end = raw.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            candidates.append(raw[start : end + 1])
+        if start != -1:
+            depth = 0
+            in_str = False
+            esc = False
+            for idx in range(start, len(raw)):
+                ch = raw[idx]
+                if in_str:
+                    if esc:
+                        esc = False
+                    elif ch == "\\":
+                        esc = True
+                    elif ch == '"':
+                        in_str = False
+                    continue
+                if ch == '"':
+                    in_str = True
+                elif ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        candidates.append(raw[start : idx + 1])
+                        break
 
         for text in candidates:
             try:
@@ -134,6 +161,8 @@ class LLMClient:
         return base if base.endswith("/v1") else f"{base}/v1"
 
     def _select_model(self, response_kind: str) -> str:
+        if response_kind == "planning_compact":
+            return self.chat_model
         if response_kind in {"planning", "feedback"}:
             return self.reasoner_model
         if response_kind in {"router", "chat", "codegen"}:
@@ -143,6 +172,8 @@ class LLMClient:
     def _max_tokens_for_kind(self, response_kind: str) -> int:
         if response_kind == "router":
             return int(min(self.max_tokens, 600))
+        if response_kind == "planning_compact":
+            return int(min(self.max_tokens, 320))
         if response_kind == "feedback":
             return int(max(4096, self.max_tokens))
         if response_kind == "planning":
@@ -153,6 +184,8 @@ class LLMClient:
 
     def _temperature_for_kind(self, response_kind: str) -> float:
         if response_kind == "router":
+            return 0.0
+        if response_kind == "planning_compact":
             return 0.0
         if response_kind == "feedback":
             return 0.1
@@ -204,7 +237,7 @@ class LLMClient:
                     "temperature": self._temperature_for_kind(response_kind),
                     "max_tokens": self._max_tokens_for_kind(response_kind),
                 }
-                if response_kind in {"router", "planning", "feedback"}:
+                if response_kind in {"router", "planning", "planning_compact", "feedback"}:
                     request_kwargs["response_format"] = {"type": "json_object"}
                 resp = client.chat.completions.create(**request_kwargs)
                 choice0 = resp.choices[0]
