@@ -47,6 +47,9 @@ Where spec must include only bounded scalar/int controls:
 - w_stage_progress, w_finish_bonus
 - w_resource_penalty, w_wait_hold_penalty, w_violation_penalty
 - recovery_floor_emphasis, safety_emphasis, late_stage_emphasis, wait_hold_discouragement
+- critical_gain_scale, progress_bonus_scale, weak_layer_gain_scale, weak_zone_gain_scale
+- late_stage_bonus_scale, completion_bonus_scale, wait_penalty_scale
+- invalid_penalty_scale, constraint_penalty_scale, material_penalty_scale, recovery_floor_bonus_scale
 Do not output Python code.
 """
 

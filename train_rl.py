@@ -72,7 +72,33 @@ def load_yaml(path: Path) -> dict[str, Any]:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-def load_revise_functions(module_path: Path) -> tuple[Callable[..., np.ndarray], Callable[..., float]]:
+def _normalize_reward_controls(raw: Any) -> dict[str, float]:
+    if not isinstance(raw, dict):
+        raw = {}
+    bounds = {
+        "critical_gain_scale": (0.6, 1.8),
+        "progress_bonus_scale": (0.6, 1.8),
+        "weak_layer_gain_scale": (0.6, 1.8),
+        "weak_zone_gain_scale": (0.6, 1.8),
+        "late_stage_bonus_scale": (0.6, 1.8),
+        "completion_bonus_scale": (0.6, 1.8),
+        "wait_penalty_scale": (0.6, 1.8),
+        "invalid_penalty_scale": (0.6, 1.8),
+        "constraint_penalty_scale": (0.6, 1.8),
+        "material_penalty_scale": (0.6, 1.8),
+        "recovery_floor_bonus_scale": (0.6, 1.8),
+    }
+    out: dict[str, float] = {}
+    for k, (lo, hi) in bounds.items():
+        try:
+            val = float(raw.get(k, 1.0))
+        except (TypeError, ValueError):
+            val = 1.0
+        out[k] = min(hi, max(lo, val))
+    return out
+
+
+def load_revise_functions(module_path: Path) -> tuple[Callable[..., np.ndarray], Callable[..., float], dict[str, float]]:
     spec = importlib.util.spec_from_file_location(module_path.stem, module_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Failed to import revise module: {module_path}")
@@ -82,7 +108,8 @@ def load_revise_functions(module_path: Path) -> tuple[Callable[..., np.ndarray],
     intrinsic_reward = getattr(module, "intrinsic_reward", None)
     if not callable(revise_state) or not callable(intrinsic_reward):
         raise ValueError(f"Module {module_path} must define revise_state and intrinsic_reward")
-    return revise_state, intrinsic_reward
+    reward_controls = _normalize_reward_controls(getattr(module, "REWARD_CONTROLS", {}))
+    return revise_state, intrinsic_reward, reward_controls
 
 
 def _call_revise(fn: Callable[..., Any], state: np.ndarray, info: dict[str, Any]) -> np.ndarray:
@@ -252,10 +279,11 @@ def run_training(
     torch.manual_seed(seed)
 
     if revise_module_path and revise_module_path.exists():
-        revise_state_fn, intrinsic_reward_fn = load_revise_functions(revise_module_path)
+        revise_state_fn, intrinsic_reward_fn, reward_controls = load_revise_functions(revise_module_path)
     else:
         revise_state_fn = lambda state, info=None: np.asarray(state, dtype=np.float32)
         intrinsic_reward_fn = lambda state, action, next_state, info=None, revised_state=None: 0.0
+        reward_controls = _normalize_reward_controls({})
 
     env = ProjectRecoveryEnv(max_steps=max_steps_per_episode, seed=seed, severity=severity)
     action_dim = int(env.action_space.n)
@@ -439,30 +467,30 @@ def run_training(
             else:
                 effective_ir = float(np.clip(float(intrinsic_scale) * float(ir), -0.30, 0.30))
             engineered_bonus = float(
-                0.25 * critical_gain
-                + 0.32 * progress_bonus
-                + 0.20 * weak_layer_gain
-                + 0.18 * weak_zone_gain
+                0.25 * critical_gain * reward_controls["critical_gain_scale"]
+                + 0.32 * progress_bonus * reward_controls["progress_bonus_scale"]
+                + 0.20 * weak_layer_gain * reward_controls["weak_layer_gain_scale"]
+                + 0.18 * weak_zone_gain * reward_controls["weak_zone_gain_scale"]
                 + milestone_bonus
-                + enter_late_bonus
-                + completion_bonus
-                + targeted_late_bonus
-                + weakest_close_bonus
-                + low_violation_finish_bonus
+                + enter_late_bonus * reward_controls["late_stage_bonus_scale"]
+                + completion_bonus * reward_controls["completion_bonus_scale"]
+                + targeted_late_bonus * reward_controls["late_stage_bonus_scale"]
+                + weakest_close_bonus * reward_controls["late_stage_bonus_scale"]
+                + low_violation_finish_bonus * reward_controls["recovery_floor_bonus_scale"]
                 + material_buffer_bonus
                 + sustainable_progress_bonus
             )
             engineered_penalty = float(
-                invalid_penalty
-                + constraint_penalty
+                invalid_penalty * reward_controls["invalid_penalty_scale"]
+                + constraint_penalty * reward_controls["constraint_penalty_scale"]
                 + coordinated_late_penalty
                 + feeder_late_penalty
-                + material_zero_penalty
-                + critical_low_material_penalty
+                + material_zero_penalty * reward_controls["material_penalty_scale"]
+                + critical_low_material_penalty * reward_controls["material_penalty_scale"]
                 + middle_stagnation_penalty
                 + severe_mid_stagnation_penalty
-                + wait_misuse_penalty
-                + repeated_wait_penalty
+                + wait_misuse_penalty * reward_controls["wait_penalty_scale"]
+                + repeated_wait_penalty * reward_controls["wait_penalty_scale"]
             )
             engineered_component = engineered_bonus - engineered_penalty
             if reward_mode_resolved == "clean":
@@ -819,6 +847,7 @@ def run_training(
         "task_mode_used": task_mode,
         "llm_mode_used": "real",
         "reward_mode": reward_mode_resolved,
+        "reward_controls": dict(reward_controls),
         "revise_module_path": str(revise_module_path),
         "policy_feature_dim_used": state_dim,
         "env_name": env_name,

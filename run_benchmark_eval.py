@@ -124,6 +124,7 @@ def run_outer_pipeline(mode: str, seed: int, reward_mode: str, split_name: str, 
     cfg_path.write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
 
     rounds = "1" if mode == "single_shot_llm" else "2"
+    candidates = "1" if mode == "single_shot_llm" else "2"
     before = {p.name for p in run_root.glob("run_*") if p.is_dir()}
     cmd = [
         "python3",
@@ -138,19 +139,35 @@ def run_outer_pipeline(mode: str, seed: int, reward_mode: str, split_name: str, 
         "--rounds-override",
         rounds,
         "--candidates-override",
-        "1",
+        candidates,
         "--base-seed",
         str(seed),
         "--config",
         str(cfg_path),
     ]
     subprocess.run(cmd, check=True, capture_output=True, text=True)
-    after = [p for p in run_root.glob("run_*") if p.is_dir() and p.name not in before]
-    latest = sorted(after)[-1] if after else sorted([p for p in run_root.glob("run_*") if p.is_dir()])[-1]
-
-    run_status = json.loads((latest / "run_status.json").read_text(encoding="utf-8"))
-    round_dirs = sorted([p for p in latest.glob("round_*") if p.is_dir()])
-    summary = json.loads((round_dirs[-1] / "summary.json").read_text(encoding="utf-8"))
+    all_runs = sorted([p for p in run_root.glob("run_*") if p.is_dir()])
+    candidate_runs = [p for p in all_runs if p.name not in before] or all_runs
+    latest = None
+    summary = None
+    run_status = None
+    for rdir in reversed(candidate_runs):
+        status_path = rdir / "run_status.json"
+        if not status_path.exists():
+            continue
+        rs = json.loads(status_path.read_text(encoding="utf-8"))
+        round_dirs = sorted([p for p in rdir.glob("round_*") if p.is_dir()])
+        if not round_dirs:
+            continue
+        summary_path = round_dirs[-1] / "summary.json"
+        if not summary_path.exists():
+            continue
+        latest = rdir
+        run_status = rs
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        break
+    if latest is None or summary is None or run_status is None:
+        raise RuntimeError("No completed outer-loop run with round summary found for benchmark eval.")
     metrics = dict(summary.get("best_candidate", {}).get("metrics", {}))
     metrics["completed"] = bool(run_status.get("completed", False))
     metrics["failed"] = bool(run_status.get("failed", True))
@@ -204,6 +221,8 @@ def main() -> None:
         "seed": int(args.seed),
         "split_name": args.split_name,
         "reward_mode": args.reward_mode,
+        "rounds": 1 if args.mode == "single_shot_llm" else 2,
+        "candidates_per_round": 1 if args.mode == "single_shot_llm" else 2,
         "selection_score": float(metrics.get("selection_score", 0.0)),
         "min_recovery_ratio": float(metrics.get("min_recovery_ratio", 0.0)),
         "constraint_violation_rate_eval": float(metrics.get("constraint_violation_rate_eval", 0.0)),

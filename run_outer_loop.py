@@ -465,7 +465,7 @@ def validate_candidate_payload(payload: dict[str, Any], max_revised_dim: int | N
     return {"valid": len(errors) == 0, "errors": errors, "normalized_payload": normalized}
 
 
-def validate_structured_spec_payload(payload: dict[str, Any]) -> dict[str, Any]:
+def validate_structured_spec_payload(payload: dict[str, Any], task_mode: str) -> dict[str, Any]:
     errors: list[str] = []
     if not isinstance(payload, dict):
         return {"valid": False, "errors": ["payload_not_object"], "normalized_payload": {}}
@@ -479,7 +479,7 @@ def validate_structured_spec_payload(payload: dict[str, Any]) -> dict[str, Any]:
         errors.append("spec_must_be_object")
         raw_spec = {}
     style = str(payload.get("style", raw_spec.get("style", "balanced")))
-    normalized_spec = normalize_spec(raw_spec, style=style)
+    normalized_spec = normalize_spec(raw_spec, style=style, task_mode=task_mode)
     built_payload = build_module_payload(
         normalized_spec,
         file_name=file_name,
@@ -1590,7 +1590,7 @@ def main() -> None:
                         "repaired_from_raw": repaired,
                     }
                     break
-                report = validate_structured_spec_payload(parsed)
+                report = validate_structured_spec_payload(parsed, task_mode=str(route.get("task_mode", "global_efficiency_priority")))
                 if report.get("valid", False):
                     report = validate_candidate_payload(
                         report.get("normalized_payload", {}),
