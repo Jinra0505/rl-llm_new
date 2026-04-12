@@ -2,17 +2,26 @@ llm:
   base_url: https://api.deepseek.com
   model_chat: deepseek-chat
   model_reasoner: deepseek-reasoner
-  timeout_seconds: 30
-  max_retries: 0
+  timeout_seconds: 60
+  max_retries: 2
   temperature: 0.3
   max_tokens: 1800
 
 outer_loop:
-  rounds: 1
-  candidates_per_round: 1
+  rounds: 2
+  candidates_per_round: 2
 
 scenario:
   severity: moderate  # mild | moderate | severe
+
+benchmark:
+  enabled: false
+  mode: off
+  split_name: benchmark_train_presets
+  preset_group: ""
+  preset_name: ""
+  preset_jitter: 0.0
+  fixed_severity: ""
 
 env:
   name: project_recovery
@@ -35,6 +44,7 @@ env:
     11: mes_to_C
     12: feeder_reconfigure
     13: coordinated_balanced
+    14: wait_hold
 
 training:
   train_episodes: 120
@@ -53,14 +63,32 @@ training:
 
 selection:
   higher_is_better: true
+  candidate_search_styles:
+    - conservative_safety_first
+    - balanced
+    - aggressive_recovery_first
   task_mode_metric_weights:
     __global__:
-      eval_success_rate: 0.40
-      critical_load_recovery_ratio: 0.25
-      min_recovery_ratio: 0.20
-      constraint_violation_rate_eval: -0.35
-      mean_progress_delta_eval: 0.08
-      late_stage_targeted_action_rate: 0.08
+      eval_success_rate: 0.48
+      critical_load_recovery_ratio: 0.24
+      min_recovery_ratio: 0.18
+      mean_progress_delta_eval: 0.16
+      constraint_violation_rate_eval: -0.18
+      late_stage_targeted_action_rate: 0.10
+  stability_guard:
+    enabled: true
+    small_score_gain_max: 0.02
+    meaningful_score_gain_min: 0.05
+    meaningful_recovery_gain_min: 0.03
+    max_violation_regression: 0.015
+    max_invalid_regression: 0.015
+    max_lipschitz_regression: 15.0
+    max_wait_usage_regression: 0.20
+    violation_penalty_weight: 0.60
+    invalid_penalty_weight: 0.60
+    lipschitz_penalty_weight: 0.001
+    wait_penalty_weight: 0.20
+    score_gain_protection: 0.02
 
 reward_weights:
   delta_power: 0.20
@@ -73,13 +101,11 @@ reward_weights:
   mes_overuse_penalty: 0.03
 
 task_modes:
-  default: coordinated_restoration
+  default: global_efficiency_priority
   allowed:
-    - road_opening_priority
-    - critical_power_priority
-    - backbone_comm_priority
-    - coordinated_restoration
-    - stabilization_priority
+    - critical_load_priority
+    - restoration_capability_priority
+    - global_efficiency_priority
 
 paths:
   generated_dir: generated
