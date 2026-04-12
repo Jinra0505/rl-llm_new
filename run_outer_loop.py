@@ -925,6 +925,39 @@ def _build_style_contract(style: str, reference_metrics: dict[str, Any], previou
     }
 
 
+def _build_safe_anchor_payload(task_mode: str, file_name: str) -> dict[str, Any]:
+    raw_spec = {
+        "style": "conservative_safety_first",
+        "task_mode": task_mode,
+        "append_crit_progress": 1,
+        "append_backbone_balance": 1,
+        "append_resource_buffer": 1,
+        "append_stage_indicator": 1,
+        "recovery_floor_emphasis": 0.85,
+        "safety_emphasis": 0.95,
+        "late_stage_emphasis": 0.55,
+        "wait_hold_discouragement": 0.95,
+        "critical_gain_scale": 1.0,
+        "progress_bonus_scale": 0.9,
+        "weak_layer_gain_scale": 0.9,
+        "weak_zone_gain_scale": 0.9,
+        "late_stage_bonus_scale": 0.9,
+        "completion_bonus_scale": 0.95,
+        "wait_penalty_scale": 1.45,
+        "invalid_penalty_scale": 1.5,
+        "constraint_penalty_scale": 1.55,
+        "material_penalty_scale": 1.35,
+        "recovery_floor_bonus_scale": 1.2,
+    }
+    spec = normalize_spec(raw_spec, style="conservative_safety_first", task_mode=task_mode)
+    return build_module_payload(
+        spec,
+        file_name=file_name,
+        rationale="Deterministic safe-anchor candidate with strict legality/resource guards and recovery-floor support.",
+        expected_behavior="Conservative legal actions with bounded progress; intended as safe fallback anchor for uncertain rounds.",
+    )
+
+
 def _reference_metrics(previous_best: dict[str, Any] | None, cfg: dict[str, Any], outputs_root: Path) -> dict[str, Any]:
     if previous_best and isinstance(previous_best.get("metrics"), dict):
         return dict(previous_best["metrics"])
@@ -976,6 +1009,7 @@ def select_best_candidate(
     stability_cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     accepted: list[dict[str, Any]] = []
+    safe_candidates_all: list[dict[str, Any]] = []
     rejected_ids: list[str] = []
     rejection_reasons: dict[str, list[str]] = {}
     stability_cfg = stability_cfg or {}
@@ -1063,6 +1097,8 @@ def select_best_candidate(
             if (min_recovery + recovery_floor_gate_epsilon) < recovery_floor_target and violation <= 0.0 and invalid_rate <= 0.0:
                 reasons.append("under_recovery_below_floor")
                 recovery_gate_triggered = True
+            if violation <= 0.0 and invalid_rate <= 0.0:
+                safe_candidates_all.append(cand)
 
         if reasons:
             rejected_ids.append(cid)
@@ -1070,6 +1106,8 @@ def select_best_candidate(
         else:
             accepted.append(cand)
 
+    strict_safety_preference_applied = False
+    selected_candidate_is_strict_safe = False
     if accepted:
         pool = accepted
     else:
@@ -1081,6 +1119,7 @@ def select_best_candidate(
             and _safe_float(c.get("metrics", {}).get("invalid_action_rate_eval", c.get("metrics", {}).get("invalid_action_rate", 1.0))) <= 0.0
         ]
         if safe_fallback_pool:
+            strict_safety_preference_applied = True
             prev_meets_floor = bool(
                 previous_best
                 and isinstance(previous_best.get("metrics"), dict)
@@ -1140,6 +1179,32 @@ def select_best_candidate(
         best_metrics = select_best([c["metrics"] for c in pool], "recovery_adjusted_selection_score", higher_is_better)
         best_candidate = next(c for c in pool if c["metrics"] is best_metrics)
 
+    best_violation = _safe_float(best_candidate.get("metrics", {}).get("constraint_violation_rate_eval", 1.0), default=1.0)
+    best_invalid = _safe_float(
+        best_candidate.get("metrics", {}).get("invalid_action_rate_eval", best_candidate.get("metrics", {}).get("invalid_action_rate", 1.0)),
+        default=1.0,
+    )
+    selected_candidate_is_strict_safe = bool(best_violation <= 0.0 and best_invalid <= 0.0)
+
+    # Hard safety preference: whenever a zero/zero candidate exists in this round, do not allow an unsafe winner.
+    if safe_candidates_all and not selected_candidate_is_strict_safe:
+        strict_safety_preference_applied = True
+        safe_pool = list(safe_candidates_all)
+        if all(_safe_float(c.get("metrics", {}).get("success_rate", 0.0)) <= 0.0 for c in safe_pool):
+            best_candidate = sorted(
+                safe_pool,
+                key=lambda c: (
+                    _safe_float(c.get("metrics", {}).get("min_recovery_ratio", 0.0)),
+                    _safe_float(c.get("metrics", {}).get("selection_score", 0.0)),
+                    -_safe_float(c.get("metrics", {}).get("wait_hold_usage_eval", c.get("metrics", {}).get("wait_hold_usage", 0.0))),
+                ),
+                reverse=True,
+            )[0]
+        else:
+            safe_best_metrics = select_best([c["metrics"] for c in safe_pool], "recovery_adjusted_selection_score", higher_is_better)
+            best_candidate = next(c for c in safe_pool if c["metrics"] is safe_best_metrics)
+        selected_candidate_is_strict_safe = True
+
     best_by_stability = sorted(
         pool,
         key=lambda c: _safe_float(c.get("metrics", {}).get("recovery_adjusted_selection_score", -1e9)),
@@ -1193,6 +1258,11 @@ def select_best_candidate(
             "selected_candidate_meets_recovery_floor": bool(
                 _safe_float(best_candidate.get("metrics", {}).get("min_recovery_ratio", 0.0)) + recovery_floor_gate_epsilon >= recovery_floor_target
             ),
+            "safe_candidate_ids": [str(c.get("candidate_id", "")) for c in safe_candidates_all],
+            "safe_candidate_available": bool(safe_candidates_all),
+            "strict_safety_preference_applied": strict_safety_preference_applied,
+            "selected_candidate_is_strict_safe": selected_candidate_is_strict_safe,
+            "selected_candidate_origin": str(best_candidate.get("candidate_origin", "")),
             "round_delta_summary": round_delta,
             "stability_thresholds": {
                 "small_score_gain_max": small_gain_max,
@@ -1684,6 +1754,184 @@ def main() -> None:
             )
             (round_dir / "round_status.json").write_text(json.dumps(round_status, indent=2), encoding="utf-8")
             round_candidates.append(record)
+
+        # Deterministic safe anchor candidate: always available each round.
+        anchor_id = f"r{round_idx+1}_anchor"
+        anchor_dir = round_dir / anchor_id
+        anchor_dir.mkdir(parents=True, exist_ok=True)
+        anchor_payload = _build_safe_anchor_payload(
+            task_mode=str(route.get("task_mode", "global_efficiency_priority")),
+            file_name=f"safe_anchor_{route.get('task_mode', 'global_efficiency_priority')}_{round_idx+1}.py",
+        )
+        anchor_report = validate_candidate_payload(
+            anchor_payload,
+            max_revised_dim=(
+                int(cfg.get("state_representation", {}).get("max_revised_dim"))
+                if cfg.get("state_representation", {}).get("max_revised_dim") is not None
+                else None
+            ),
+        )
+        anchor_record: dict[str, Any] = {
+            "candidate_id": anchor_id,
+            "candidate_origin": "deterministic_safe_anchor",
+            "validation": anchor_report,
+            "candidate": anchor_report.get("normalized_payload", anchor_payload),
+            "search_style": "safe_anchor",
+            "search_style_emphasis": "deterministic conservative legality/recovery-floor anchor",
+            "style_contract": {"anchor": True, "task_mode": route.get("task_mode", "")},
+        }
+        if anchor_report.get("valid", False):
+            anchor_code = anchor_report["normalized_payload"]["code"]
+            anchor_fname = anchor_report["normalized_payload"]["file_name"]
+            anchor_candidate_path = generated_dir / anchor_fname
+            anchor_candidate_path.write_text(anchor_code, encoding="utf-8")
+            (anchor_dir / anchor_fname).write_text(anchor_code, encoding="utf-8")
+            t0_anchor_train = time.time()
+            anchor_metrics = run_training(
+                revise_module_path=anchor_candidate_path,
+                env_name=args.env,
+                train_episodes=int(cfg["training"]["train_episodes"]),
+                eval_episodes=int(cfg["training"]["eval_episodes"]),
+                max_steps_per_episode=int(cfg["env"]["max_steps"]),
+                gamma=float(cfg["training"]["gamma"]),
+                task_mode=route["task_mode"],
+                llm_mode="real",
+                output_json_path=anchor_dir / "training_result.json",
+                seed=int(args.base_seed) + round_idx * 10 + 99,
+                max_revised_dim=(
+                    int(cfg.get("state_representation", {}).get("max_revised_dim"))
+                    if cfg.get("state_representation", {}).get("max_revised_dim") is not None
+                    else None
+                ),
+                task_mode_metric_weights=cfg.get("selection", {}).get("task_mode_metric_weights", {}),
+                dqn_cfg=cfg.get("training", {}),
+                severity=str(cfg.get("scenario", {}).get("severity", "moderate")),
+                intrinsic_mode=args.intrinsic_mode,
+                intrinsic_scale=args.intrinsic_scale,
+                env_reset_options=_build_benchmark_reset_options(cfg),
+            )
+            anchor_metrics["selected_task"] = route.get("task_mode")
+            anchor_metrics["llm_effective_mode"] = "deterministic_anchor"
+            anchor_metrics["router_mode"] = args.router_mode
+            anchor_metrics["wait_hold_usage_eval"] = float(anchor_metrics.get("wait_hold_usage_eval", anchor_metrics.get("wait_hold_usage", 0.0)))
+            anchor_record["metrics"] = anchor_metrics
+            anchor_record["candidate_path"] = str(anchor_candidate_path)
+            anchor_record["task_mode"] = route["task_mode"]
+            anchor_record["route_source"] = "deterministic_anchor"
+            anchor_record["selection_score"] = float(anchor_metrics.get("selection_score", 0.0))
+            anchor_record["representative_eval_summary"] = dict(anchor_metrics.get("representative_eval_summary", {}))
+            anchor_record["training_elapsed_sec"] = float(time.time() - t0_anchor_train)
+            (anchor_dir / "metrics.json").write_text(json.dumps(anchor_metrics, indent=2), encoding="utf-8")
+        else:
+            anchor_record["metrics"] = {"selection_score": -1e9 if higher_is_better else 1e9, "success_rate": 0.0}
+            anchor_record["error"] = "safe_anchor_validation_failed"
+
+        (anchor_dir / "candidate_record.json").write_text(json.dumps(anchor_record, indent=2), encoding="utf-8")
+        round_status["candidates"].append(
+            {
+                "candidate_id": anchor_id,
+                "candidate_origin": "deterministic_safe_anchor",
+                "search_style": "safe_anchor",
+                "search_style_emphasis": "deterministic conservative legality/recovery-floor anchor",
+                "valid": bool(anchor_report.get("valid", False)),
+                "codegen_validation_elapsed_sec": 0.0,
+                "training_elapsed_sec": float(anchor_record.get("training_elapsed_sec", 0.0)),
+                "selection_score": float(anchor_record.get("selection_score", anchor_record.get("metrics", {}).get("selection_score", 0.0))),
+            }
+        )
+        (round_dir / "round_status.json").write_text(json.dumps(round_status, indent=2), encoding="utf-8")
+        round_candidates.append(anchor_record)
+
+        # Deterministic baseline-noop safety backstop candidate.
+        backstop_id = f"r{round_idx+1}_backstop"
+        backstop_dir = round_dir / backstop_id
+        backstop_dir.mkdir(parents=True, exist_ok=True)
+        backstop_record: dict[str, Any] = {
+            "candidate_id": backstop_id,
+            "candidate_origin": "deterministic_safe_backstop",
+            "search_style": "baseline_noop_backstop",
+            "search_style_emphasis": "strict zero-safety backstop with intrinsic off",
+            "style_contract": {"backstop": True, "intrinsic_mode": "off", "task_mode": route.get("task_mode", "")},
+            "validation": {"valid": True, "source_module": "baseline_noop.py"},
+            "candidate": {"file_name": "baseline_noop.py"},
+            "candidate_path": str(Path("baseline_noop.py")),
+            "task_mode": route["task_mode"],
+            "route_source": "deterministic_backstop",
+        }
+        t0_backstop_train = time.time()
+        backstop_attempts: list[dict[str, Any]] = []
+        for offset in [10, 40, 50]:
+            backstop_seed = int(args.base_seed) + round_idx * 10 + offset
+            attempt_metrics = run_training(
+                revise_module_path=Path("baseline_noop.py"),
+                env_name=args.env,
+                train_episodes=int(cfg["training"]["train_episodes"]),
+                eval_episodes=int(cfg["training"]["eval_episodes"]),
+                max_steps_per_episode=int(cfg["env"]["max_steps"]),
+                gamma=float(cfg["training"]["gamma"]),
+                task_mode=route["task_mode"],
+                llm_mode="real",
+                output_json_path=backstop_dir / f"training_result_seed{backstop_seed}.json",
+                seed=backstop_seed,
+                max_revised_dim=(
+                    int(cfg.get("state_representation", {}).get("max_revised_dim"))
+                    if cfg.get("state_representation", {}).get("max_revised_dim") is not None
+                    else None
+                ),
+                task_mode_metric_weights=cfg.get("selection", {}).get("task_mode_metric_weights", {}),
+                dqn_cfg=cfg.get("training", {}),
+                severity=str(cfg.get("scenario", {}).get("severity", "moderate")),
+                intrinsic_mode="off",
+                intrinsic_scale=1.0,
+                env_reset_options=_build_benchmark_reset_options(cfg),
+            )
+            attempt_metrics["backstop_seed"] = backstop_seed
+            attempt_metrics["is_strict_safe"] = bool(
+                _safe_float(attempt_metrics.get("constraint_violation_rate_eval", 1.0), default=1.0) <= 0.0
+                and _safe_float(attempt_metrics.get("invalid_action_rate_eval", attempt_metrics.get("invalid_action_rate", 1.0)), default=1.0) <= 0.0
+            )
+            backstop_attempts.append(attempt_metrics)
+
+        safe_attempts = [m for m in backstop_attempts if bool(m.get("is_strict_safe", False))]
+        candidate_attempts = safe_attempts if safe_attempts else backstop_attempts
+        backstop_metrics = sorted(
+            candidate_attempts,
+            key=lambda m: (
+                _safe_float(m.get("selection_score", 0.0)),
+                _safe_float(m.get("min_recovery_ratio", 0.0)),
+                -_safe_float(m.get("wait_hold_usage_eval", m.get("wait_hold_usage", 0.0))),
+            ),
+            reverse=True,
+        )[0]
+        backstop_metrics["selected_task"] = route.get("task_mode")
+        backstop_metrics["llm_effective_mode"] = "deterministic_backstop"
+        backstop_metrics["router_mode"] = args.router_mode
+        backstop_metrics["wait_hold_usage_eval"] = float(backstop_metrics.get("wait_hold_usage_eval", backstop_metrics.get("wait_hold_usage", 0.0)))
+        backstop_record["metrics"] = backstop_metrics
+        backstop_record["backstop_attempts"] = backstop_attempts
+        backstop_record["strict_safe_attempt_count"] = int(len(safe_attempts))
+        backstop_record["selected_backstop_seed"] = int(backstop_metrics.get("backstop_seed", -1))
+        backstop_record["selection_score"] = float(backstop_metrics.get("selection_score", 0.0))
+        backstop_record["representative_eval_summary"] = dict(backstop_metrics.get("representative_eval_summary", {}))
+        backstop_record["training_elapsed_sec"] = float(time.time() - t0_backstop_train)
+        (backstop_dir / "metrics.json").write_text(json.dumps(backstop_metrics, indent=2), encoding="utf-8")
+        (backstop_dir / "candidate_record.json").write_text(json.dumps(backstop_record, indent=2), encoding="utf-8")
+        round_status["candidates"].append(
+            {
+                "candidate_id": backstop_id,
+                "candidate_origin": "deterministic_safe_backstop",
+                "search_style": "baseline_noop_backstop",
+                "search_style_emphasis": "strict zero-safety backstop with intrinsic off",
+                "valid": True,
+                "codegen_validation_elapsed_sec": 0.0,
+                "training_elapsed_sec": float(backstop_record.get("training_elapsed_sec", 0.0)),
+                "selection_score": float(backstop_record.get("selection_score", 0.0)),
+                "strict_safe_attempt_count": int(backstop_record.get("strict_safe_attempt_count", 0)),
+                "selected_backstop_seed": int(backstop_record.get("selected_backstop_seed", -1)),
+            }
+        )
+        (round_dir / "round_status.json").write_text(json.dumps(round_status, indent=2), encoding="utf-8")
+        round_candidates.append(backstop_record)
 
         selection_result = select_best_candidate(
             round_candidates=round_candidates,

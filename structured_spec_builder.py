@@ -66,6 +66,47 @@ def normalize_spec(raw: dict[str, Any] | None, style: str = "balanced", task_mod
         },
     }
     d = dict(defaults.get(style, defaults["balanced"]))
+    style_reward_control_multipliers = {
+        "conservative_safety_first": {
+            "critical_gain_scale": 0.92,
+            "progress_bonus_scale": 0.90,
+            "weak_layer_gain_scale": 0.92,
+            "weak_zone_gain_scale": 0.92,
+            "late_stage_bonus_scale": 0.92,
+            "completion_bonus_scale": 0.95,
+            "wait_penalty_scale": 1.35,
+            "invalid_penalty_scale": 1.35,
+            "constraint_penalty_scale": 1.40,
+            "material_penalty_scale": 1.35,
+            "recovery_floor_bonus_scale": 1.15,
+        },
+        "balanced": {
+            "critical_gain_scale": 1.00,
+            "progress_bonus_scale": 1.00,
+            "weak_layer_gain_scale": 1.00,
+            "weak_zone_gain_scale": 1.00,
+            "late_stage_bonus_scale": 1.00,
+            "completion_bonus_scale": 1.00,
+            "wait_penalty_scale": 1.00,
+            "invalid_penalty_scale": 1.00,
+            "constraint_penalty_scale": 1.00,
+            "material_penalty_scale": 1.00,
+            "recovery_floor_bonus_scale": 1.00,
+        },
+        "aggressive_recovery_first": {
+            "critical_gain_scale": 1.25,
+            "progress_bonus_scale": 1.22,
+            "weak_layer_gain_scale": 1.18,
+            "weak_zone_gain_scale": 1.18,
+            "late_stage_bonus_scale": 1.22,
+            "completion_bonus_scale": 1.25,
+            "wait_penalty_scale": 0.85,
+            "invalid_penalty_scale": 0.90,
+            "constraint_penalty_scale": 0.90,
+            "material_penalty_scale": 0.90,
+            "recovery_floor_bonus_scale": 1.20,
+        },
+    }
     task_mode = str(task_mode or raw.get("task_mode", "global_efficiency_priority")).strip()
     task_multipliers = {
         "critical_load_priority": {
@@ -116,17 +157,17 @@ def normalize_spec(raw: dict[str, Any] | None, style: str = "balanced", task_mod
     d["w_violation_penalty"] = _clip(raw.get("w_violation_penalty", d["w_violation_penalty"]), 0.0, 0.3, d["w_violation_penalty"])
     d["task_mode"] = task_mode
     d["reward_controls"] = {
-        "critical_gain_scale": _clip(raw.get("critical_gain_scale", mul.get("critical_gain_scale", 1.0)), 0.6, 1.8, 1.0),
-        "progress_bonus_scale": _clip(raw.get("progress_bonus_scale", mul.get("progress_bonus_scale", 1.0)), 0.6, 1.8, 1.0),
-        "weak_layer_gain_scale": _clip(raw.get("weak_layer_gain_scale", mul.get("weak_layer_gain_scale", 1.0)), 0.6, 1.8, 1.0),
-        "weak_zone_gain_scale": _clip(raw.get("weak_zone_gain_scale", mul.get("weak_zone_gain_scale", 1.0)), 0.6, 1.8, 1.0),
-        "late_stage_bonus_scale": _clip(raw.get("late_stage_bonus_scale", mul.get("late_stage_bonus_scale", 1.0)), 0.6, 1.8, 1.0),
-        "completion_bonus_scale": _clip(raw.get("completion_bonus_scale", mul.get("completion_bonus_scale", 1.0)), 0.6, 1.8, 1.0),
-        "wait_penalty_scale": _clip(raw.get("wait_penalty_scale", mul.get("wait_penalty_scale", 1.0)), 0.6, 1.8, 1.0),
-        "invalid_penalty_scale": _clip(raw.get("invalid_penalty_scale", mul.get("invalid_penalty_scale", 1.0)), 0.6, 1.8, 1.0),
-        "constraint_penalty_scale": _clip(raw.get("constraint_penalty_scale", mul.get("constraint_penalty_scale", 1.0)), 0.6, 1.8, 1.0),
-        "material_penalty_scale": _clip(raw.get("material_penalty_scale", mul.get("material_penalty_scale", 1.0)), 0.6, 1.8, 1.0),
-        "recovery_floor_bonus_scale": _clip(raw.get("recovery_floor_bonus_scale", mul.get("recovery_floor_bonus_scale", 1.0)), 0.6, 1.8, 1.0),
+        "critical_gain_scale": _clip(raw.get("critical_gain_scale", mul.get("critical_gain_scale", 1.0) * style_reward_control_multipliers.get(style, {}).get("critical_gain_scale", 1.0)), 0.6, 1.8, 1.0),
+        "progress_bonus_scale": _clip(raw.get("progress_bonus_scale", mul.get("progress_bonus_scale", 1.0) * style_reward_control_multipliers.get(style, {}).get("progress_bonus_scale", 1.0)), 0.6, 1.8, 1.0),
+        "weak_layer_gain_scale": _clip(raw.get("weak_layer_gain_scale", mul.get("weak_layer_gain_scale", 1.0) * style_reward_control_multipliers.get(style, {}).get("weak_layer_gain_scale", 1.0)), 0.6, 1.8, 1.0),
+        "weak_zone_gain_scale": _clip(raw.get("weak_zone_gain_scale", mul.get("weak_zone_gain_scale", 1.0) * style_reward_control_multipliers.get(style, {}).get("weak_zone_gain_scale", 1.0)), 0.6, 1.8, 1.0),
+        "late_stage_bonus_scale": _clip(raw.get("late_stage_bonus_scale", mul.get("late_stage_bonus_scale", 1.0) * style_reward_control_multipliers.get(style, {}).get("late_stage_bonus_scale", 1.0)), 0.6, 1.8, 1.0),
+        "completion_bonus_scale": _clip(raw.get("completion_bonus_scale", mul.get("completion_bonus_scale", 1.0) * style_reward_control_multipliers.get(style, {}).get("completion_bonus_scale", 1.0)), 0.6, 1.8, 1.0),
+        "wait_penalty_scale": _clip(raw.get("wait_penalty_scale", mul.get("wait_penalty_scale", 1.0) * style_reward_control_multipliers.get(style, {}).get("wait_penalty_scale", 1.0)), 0.6, 1.8, 1.0),
+        "invalid_penalty_scale": _clip(raw.get("invalid_penalty_scale", mul.get("invalid_penalty_scale", 1.0) * style_reward_control_multipliers.get(style, {}).get("invalid_penalty_scale", 1.0)), 0.6, 1.8, 1.0),
+        "constraint_penalty_scale": _clip(raw.get("constraint_penalty_scale", mul.get("constraint_penalty_scale", 1.0) * style_reward_control_multipliers.get(style, {}).get("constraint_penalty_scale", 1.0)), 0.6, 1.8, 1.0),
+        "material_penalty_scale": _clip(raw.get("material_penalty_scale", mul.get("material_penalty_scale", 1.0) * style_reward_control_multipliers.get(style, {}).get("material_penalty_scale", 1.0)), 0.6, 1.8, 1.0),
+        "recovery_floor_bonus_scale": _clip(raw.get("recovery_floor_bonus_scale", mul.get("recovery_floor_bonus_scale", 1.0) * style_reward_control_multipliers.get(style, {}).get("recovery_floor_bonus_scale", 1.0)), 0.6, 1.8, 1.0),
     }
     return d
 
