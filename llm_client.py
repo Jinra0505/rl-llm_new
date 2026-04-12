@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Formal-run LLM client (real-only, no automatic mock fallback)."""
+"""Formal-run LLM client (strict real-only mode)."""
 
 import json
 import os
@@ -10,12 +10,7 @@ from typing import Any
 
 
 class LLMClient:
-    """DeepSeek-compatible OpenAI client for formal runs.
-
-    Notes:
-    - Formal path is strictly real-only.
-    - `_mock_response` is kept as test-only helper and is unreachable from formal CLI flows.
-    """
+    """DeepSeek-compatible OpenAI client for formal runs."""
 
     def __init__(
         self,
@@ -66,7 +61,6 @@ class LLMClient:
 
     @property
     def using_mock(self) -> bool:
-        # Kept for backward compatibility with existing code paths; formal mode is always real.
         return False
 
     def effective_mode(self) -> str:
@@ -83,6 +77,9 @@ class LLMClient:
         success: bool,
         latency_sec: float,
         error: str = "",
+        finish_reason: str = "",
+        content_len: int = 0,
+        reasoning_content_len: int = 0,
     ) -> None:
         self.call_history.append(
             {
@@ -92,6 +89,9 @@ class LLMClient:
                 "success": bool(success),
                 "latency_sec": float(latency_sec),
                 "error": error,
+                "finish_reason": finish_reason,
+                "content_len": int(content_len),
+                "reasoning_content_len": int(reasoning_content_len),
             }
         )
         self.call_count += 1
@@ -99,13 +99,20 @@ class LLMClient:
             self.last_error = error
 
     def chat(self, messages: list[dict[str, str]], response_kind: str = "chat", sample_idx: int = 0) -> str:
-        _ = sample_idx  # test-only placeholder; formal path never uses mock sampling.
+        _ = sample_idx
         return self._real_chat(messages, response_kind=response_kind)
 
     def chat_json(self, messages: list[dict[str, str]], response_kind: str = "chat", sample_idx: int = 0) -> dict[str, Any]:
         raw = self.chat(messages, response_kind=response_kind, sample_idx=sample_idx)
         candidates: list[str] = [raw.strip()]
         cleaned = raw.strip()
+        lo = cleaned.lower()
+        marker = "```json"
+        if marker in lo:
+            start = lo.find(marker) + len(marker)
+            end = lo.find("```", start)
+            if end != -1:
+                candidates.append(cleaned[start:end].strip())
         if cleaned.startswith("```"):
             lines = cleaned.splitlines()
             if lines and lines[0].startswith("```"):
@@ -114,9 +121,29 @@ class LLMClient:
                 lines = lines[:-1]
             candidates.append("\n".join(lines).strip())
         start = raw.find("{")
-        end = raw.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            candidates.append(raw[start : end + 1])
+        if start != -1:
+            depth = 0
+            in_str = False
+            esc = False
+            for idx in range(start, len(raw)):
+                ch = raw[idx]
+                if in_str:
+                    if esc:
+                        esc = False
+                    elif ch == "\\":
+                        esc = True
+                    elif ch == '"':
+                        in_str = False
+                    continue
+                if ch == '"':
+                    in_str = True
+                elif ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        candidates.append(raw[start : idx + 1])
+                        break
 
         for text in candidates:
             try:
@@ -134,19 +161,35 @@ class LLMClient:
         return base if base.endswith("/v1") else f"{base}/v1"
 
     def _select_model(self, response_kind: str) -> str:
-        if response_kind in {"router", "feedback"}:
-            return self.reasoner_model or self.chat_model
+        if response_kind == "planning_compact":
+            return self.chat_model
+        if response_kind in {"planning", "feedback"}:
+            return self.reasoner_model
+        if response_kind in {"router", "chat", "codegen"}:
+            return self.chat_model
         return self.chat_model
 
     def _max_tokens_for_kind(self, response_kind: str) -> int:
-        if response_kind in {"router", "planning", "feedback"}:
+        if response_kind == "router":
             return int(min(self.max_tokens, 600))
+        if response_kind == "planning_compact":
+            return int(min(self.max_tokens, 320))
+        if response_kind == "feedback":
+            return int(max(4096, self.max_tokens))
+        if response_kind == "planning":
+            return int(max(4096, self.max_tokens))
         if response_kind == "codegen":
-            return int(min(self.max_tokens, 800))
+            return int(min(self.max_tokens, 1400))
         return int(self.max_tokens)
 
     def _temperature_for_kind(self, response_kind: str) -> float:
-        if response_kind in {"router", "planning", "feedback"}:
+        if response_kind == "router":
+            return 0.0
+        if response_kind == "planning_compact":
+            return 0.0
+        if response_kind == "feedback":
+            return 0.1
+        if response_kind in {"router", "planning"}:
             return float(min(self.temperature, 0.2))
         return float(self.temperature)
 
@@ -177,55 +220,65 @@ class LLMClient:
         except Exception as exc:  # noqa: BLE001
             raise RuntimeError(f"LLM preflight check failed. {exc}") from exc
 
-    # test-only helper
-    def _mock_response(self, response_kind: str, sample_idx: int) -> str:
-        _ = response_kind
-        _ = sample_idx
-        return "{}"
-
     def _real_chat(self, messages: list[dict[str, str]], response_kind: str = "chat") -> str:
         from openai import OpenAI
 
         client = OpenAI(api_key=self.api_key, base_url=self._normalize_base_url(), timeout=self.timeout_seconds, max_retries=0)
         preferred_model = self._select_model(response_kind=response_kind)
-        model_candidates = [preferred_model]
-        if self.chat_model and self.chat_model != preferred_model:
-            model_candidates.append(self.chat_model)
-        if self.reasoner_model and self.reasoner_model not in model_candidates:
-            model_candidates.append(self.reasoner_model)
 
         last_exc: Exception | None = None
-        for model in model_candidates:
-            for attempt in range(self.max_retries + 1):
-                t0 = time.time()
-                try:
-                    resp = client.chat.completions.create(
-                        model=model,
-                        messages=messages,
-                        temperature=self._temperature_for_kind(response_kind),
-                        max_tokens=self._max_tokens_for_kind(response_kind),
+        model = preferred_model
+        for attempt in range(self.max_retries + 1):
+            t0 = time.time()
+            try:
+                request_kwargs: dict[str, Any] = {
+                    "model": model,
+                    "messages": messages,
+                    "temperature": self._temperature_for_kind(response_kind),
+                    "max_tokens": self._max_tokens_for_kind(response_kind),
+                }
+                if response_kind in {"router", "planning", "planning_compact", "feedback"}:
+                    request_kwargs["response_format"] = {"type": "json_object"}
+                resp = client.chat.completions.create(**request_kwargs)
+                choice0 = resp.choices[0]
+                finish_reason = str(getattr(choice0, "finish_reason", "") or "")
+                msg_obj = getattr(choice0, "message", None)
+                reasoning_content = getattr(msg_obj, "reasoning_content", None) if msg_obj is not None else None
+                reasoning_len = len(reasoning_content) if isinstance(reasoning_content, str) else 0
+                content = (msg_obj.content if msg_obj is not None else "") or ""
+                content_len = len(content)
+                if not content.strip():
+                    input_chars = sum(len(str(m.get("content", ""))) for m in messages)
+                    raise RuntimeError(
+                        "Empty content from LLM: "
+                        f"response_kind={response_kind}, model={model}, finish_reason={finish_reason}, "
+                        f"has_reasoning_content={bool(reasoning_content)}, reasoning_content_len={reasoning_len}, "
+                        f"input_chars={input_chars}"
                     )
-                    content = resp.choices[0].message.content or ""
-                    if not content.strip():
-                        raise RuntimeError(f"Empty content from LLM for response_kind={response_kind}, model={model}")
-                    self._record_call(
-                        response_kind=response_kind,
-                        model=model,
-                        success=True,
-                        latency_sec=time.time() - t0,
-                        error="",
-                    )
-                    return content
-                except Exception as exc:  # noqa: BLE001
-                    last_exc = exc
-                    err_msg = str(exc)
-                    self._record_call(
-                        response_kind=response_kind,
-                        model=model,
-                        success=False,
-                        latency_sec=time.time() - t0,
-                        error=err_msg,
-                    )
-                    if attempt < self.max_retries:
-                        time.sleep(1.2 * (attempt + 1))
+                self._record_call(
+                    response_kind=response_kind,
+                    model=model,
+                    success=True,
+                    latency_sec=time.time() - t0,
+                    error="",
+                    finish_reason=finish_reason,
+                    content_len=content_len,
+                    reasoning_content_len=reasoning_len,
+                )
+                return content
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                err_msg = str(exc)
+                self._record_call(
+                    response_kind=response_kind,
+                    model=model,
+                    success=False,
+                    latency_sec=time.time() - t0,
+                    error=err_msg,
+                    finish_reason="",
+                    content_len=0,
+                    reasoning_content_len=0,
+                )
+                if attempt < self.max_retries:
+                    time.sleep(1.2 * (attempt + 1))
         raise RuntimeError(f"DeepSeek API call failed after retries ({response_kind}, model={preferred_model}): {last_exc}")
