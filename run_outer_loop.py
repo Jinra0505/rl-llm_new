@@ -17,7 +17,8 @@ import yaml
 
 from llm_client import LLMClient
 from mock_recovery_env import ProjectRecoveryEnv
-from prompts import CODEGEN_PROMPT, COMPACT_PLANNING_PROMPT, FEEDBACK_PROMPT, PLANNING_PROMPT, SYSTEM_PROMPT
+from prompts import COMPACT_PLANNING_PROMPT, FEEDBACK_PROMPT, PLANNING_PROMPT, STRUCTURED_SPEC_PROMPT, SYSTEM_PROMPT
+from structured_spec_builder import build_module_payload, normalize_spec
 from task_recognizer import ScenarioTaskRecognizer, summarize_trajectory
 from train_rl import run_training
 
@@ -416,6 +417,7 @@ def validate_candidate_payload(payload: dict[str, Any], max_revised_dim: int | N
         "rationale": str(payload.get("rationale", "")),
         "code": code,
         "expected_behavior": str(payload.get("expected_behavior", "")),
+        "structured_spec": payload.get("structured_spec", {}),
     }
 
     if not file_name.endswith(".py"):
@@ -461,6 +463,30 @@ def validate_candidate_payload(payload: dict[str, Any], max_revised_dim: int | N
         errors.extend(_semantic_validate_candidate(code, max_revised_dim=max_revised_dim))
 
     return {"valid": len(errors) == 0, "errors": errors, "normalized_payload": normalized}
+
+
+def validate_structured_spec_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    errors: list[str] = []
+    if not isinstance(payload, dict):
+        return {"valid": False, "errors": ["payload_not_object"], "normalized_payload": {}}
+    file_name = str(payload.get("file_name", "structured_candidate.py")).strip() or "structured_candidate.py"
+    if not file_name.endswith(".py"):
+        file_name = f"{file_name}.py"
+    rationale = str(payload.get("rationale", "")).strip()
+    expected_behavior = str(payload.get("expected_behavior", "")).strip()
+    raw_spec = payload.get("spec", {})
+    if not isinstance(raw_spec, dict):
+        errors.append("spec_must_be_object")
+        raw_spec = {}
+    style = str(payload.get("style", raw_spec.get("style", "balanced")))
+    normalized_spec = normalize_spec(raw_spec, style=style)
+    built_payload = build_module_payload(
+        normalized_spec,
+        file_name=file_name,
+        rationale=rationale,
+        expected_behavior=expected_behavior,
+    )
+    return {"valid": len(errors) == 0, "errors": errors, "normalized_payload": built_payload}
 
 
 def _action_category(action: int) -> str:
@@ -1516,17 +1542,13 @@ def main() -> None:
             )
             t0_codegen = time.time()
 
-            prompt = CODEGEN_PROMPT.format(
+            prompt = STRUCTURED_SPEC_PROMPT.format(
                 task_mode=route["task_mode"],
                 stage=route["stage"],
                 observation_schema=str(cfg["env"]),
                 planning_json=json.dumps(planning_json, indent=2, ensure_ascii=False),
             )
-            prompt += "\n\nReturn compact JSON and keep generated code concise (<= 45 lines)."
-            prompt += (
-                "\nCode must include explicit finish-oriented shaping: reward entering late stage, reward completion, "
-                "penalize prolonged middle-stage tiny progress, and penalize resource collapse."
-            )
+            prompt += "\n\nReturn compact JSON for spec only; deterministic local builder will generate Python module."
             prompt += "\n\n" + style_meta["prompt"]
             prompt += "\n\nStyle repair contract (must obey):\n" + json.dumps(style_contract, indent=2)
             if history:
@@ -1540,18 +1562,13 @@ def main() -> None:
                 if attempt > 0:
                     attempt_prompt += (
                         "\n\nPrevious output was invalid. Respond with ONLY one JSON object with keys: "
-                        "file_name, rationale, code, expected_behavior."
-                    )
-                    attempt_prompt += (
-                        "\nThe 'code' field must be a valid Python source string with escaped newlines, "
-                        "and must parse successfully."
+                        "file_name, rationale, expected_behavior, spec."
                     )
                     attempt_prompt += (
                         "\nRetry hard constraints:"
-                        "\n- revise_state must include original 24D raw state (no compression/subset)."
-                        "\n- revise_state output must be fixed-length and never shorter than 24."
-                        "\n- prefer simple appended summary features over handcrafted compression."
-                        "\n- intrinsic_reward must be smooth, conservative, mostly delta-based, and small magnitude."
+                        "\n- provide bounded scalar coefficients only in spec."
+                        "\n- no python code."
+                        "\n- keep spec concise and deterministic-builder friendly."
                     )
                     attempt_prompt += "\nPrevious validation errors: " + json.dumps(report.get("errors", []), ensure_ascii=False)
                 try:
@@ -1573,14 +1590,16 @@ def main() -> None:
                         "repaired_from_raw": repaired,
                     }
                     break
-                report = validate_candidate_payload(
-                    parsed,
-                    max_revised_dim=(
-                        int(cfg.get("state_representation", {}).get("max_revised_dim"))
-                        if cfg.get("state_representation", {}).get("max_revised_dim") is not None
-                        else None
-                    ),
-                )
+                report = validate_structured_spec_payload(parsed)
+                if report.get("valid", False):
+                    report = validate_candidate_payload(
+                        report.get("normalized_payload", {}),
+                        max_revised_dim=(
+                            int(cfg.get("state_representation", {}).get("max_revised_dim"))
+                            if cfg.get("state_representation", {}).get("max_revised_dim") is not None
+                            else None
+                        ),
+                    )
                 report["repaired_from_raw"] = repaired
                 if report["valid"]:
                     break

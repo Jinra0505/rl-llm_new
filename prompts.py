@@ -15,19 +15,13 @@ Action space has 15 actions:
 0-2 road A/B/C, 3-5 power A/B/C, 6-8 comm A/B/C, 9-11 mes_to A/B/C, 12 feeder_reconfigure, 13 coordinated_balanced, 14 wait_hold.
 """
 
-CODEGEN_PROMPT = """Task mode: {task_mode}, stage: {stage}
+STRUCTURED_SPEC_PROMPT = """Task mode: {task_mode}, stage: {stage}
 Environment: zonal three-layer coupled recovery (communication, power, transportation) with zones A/B/C.
 Observation schema summary:
 {observation_schema}
 Planning blueprint JSON:
 {planning_json}
-Generate one module that improves policy state representation and intrinsic shaping for this 24D state.
-Hard constraints for revise_state:
-- output must always be 1-D with constant length across inputs
-- output length must always be >= 24
-- keep the original 24 raw dimensions intact (do not drop/reorder/compress them)
-- you may append only a small number of summary features (target: 0-6 appended dims)
-- do NOT return a subset of state and do NOT compress to fewer than 24 dims
+Generate one compact structured shaping spec (NOT Python code).
 Prioritize system-level recovery over single-layer gains:
 - critical load recovery and completion progress
 - balanced tri-layer recovery across zones
@@ -37,15 +31,23 @@ Prioritize system-level recovery over single-layer gains:
 - do not overuse feeder/coordinated actions when prerequisites are weak (e.g., low mes_soc, low backbone_comm, low material)
 - prioritize low-violation completion in late-stage finishing
 - include explicit signals to reach late stage and complete restoration
-- intrinsic reward should be small, dense, progress-oriented, and smooth
-- prefer mostly delta-based terms (state improvement / progress deltas)
-- avoid many hard thresholds and branch-heavy logic
-- do not duplicate invalid-action / constraint / wait penalties already handled elsewhere
-- avoid large constant bonuses/penalties and avoid overly aggressive late-stage shaping
-- do not reward conservative inaction
-Only output code with revise_state and intrinsic_reward (no extra dependencies/modules).
-Keep code short and robust (target <= 45 lines).
-Return JSON keys: file_name, rationale, code, expected_behavior.
+- intrinsic shaping should be small, dense, progress-oriented, and smooth
+Return strict JSON only with keys:
+- file_name
+- rationale
+- expected_behavior
+- spec
+Where spec must include only bounded scalar/int controls:
+- style (conservative_safety_first|balanced|aggressive_recovery_first)
+- append_crit_progress (0/1)
+- append_backbone_balance (0/1)
+- append_resource_buffer (0/1)
+- append_stage_indicator (0/1)
+- w_delta_comm, w_delta_power, w_delta_road, w_delta_critical
+- w_stage_progress, w_finish_bonus
+- w_resource_penalty, w_wait_hold_penalty, w_violation_penalty
+- recovery_floor_emphasis, safety_emphasis, late_stage_emphasis, wait_hold_discouragement
+Do not output Python code.
 """
 
 ROUTER_PROMPT = """Select one task mode from:
