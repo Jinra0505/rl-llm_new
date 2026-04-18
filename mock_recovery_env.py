@@ -77,6 +77,36 @@ PRESET_LIBRARY: dict[str, dict[str, Any]] = {
         "material": 0.24,
         "switching": 0.40,
     },
+    "resource_constrained_case_r1": {
+        "power": [0.50, 0.53, 0.48],
+        "comm": [0.46, 0.49, 0.45],
+        "road": [0.39, 0.43, 0.41],
+        "critical": [0.61, 0.59, 0.57],
+        "backbone": [0.48, 0.46, 0.44],
+        "mes_soc": 0.30,
+        "material": 0.12,
+        "switching": 0.36,
+    },
+    "resource_constrained_case_r2": {
+        "power": [0.52, 0.55, 0.50],
+        "comm": [0.51, 0.53, 0.49],
+        "road": [0.44, 0.46, 0.42],
+        "critical": [0.58, 0.56, 0.55],
+        "backbone": [0.51, 0.49, 0.46],
+        "mes_soc": 0.38,
+        "material": 0.16,
+        "switching": 0.44,
+    },
+    "resource_constrained_case_r3": {
+        "power": [0.49, 0.51, 0.47],
+        "comm": [0.43, 0.46, 0.42],
+        "road": [0.37, 0.40, 0.38],
+        "critical": [0.63, 0.61, 0.59],
+        "backbone": [0.45, 0.43, 0.41],
+        "mes_soc": 0.26,
+        "material": 0.10,
+        "switching": 0.32,
+    },
 }
 
 PRESET_GROUPS: dict[str, list[str]] = {
@@ -85,6 +115,7 @@ PRESET_GROUPS: dict[str, list[str]] = {
     "global_finishing_presets": ["global_finishing_dominant"],
     "uncertain_boundary_presets": ["uncertain_boundary_case_u1", "uncertain_boundary_case_u2"],
     "definition_shift_presets": ["definition_shift_case_d1", "definition_shift_case_d2"],
+    "resource_constrained_presets": ["resource_constrained_case_r1", "resource_constrained_case_r2", "resource_constrained_case_r3"],
 }
 
 BENCHMARK_SPLITS: dict[str, list[str]] = {
@@ -109,6 +140,11 @@ BENCHMARK_SPLITS: dict[str, list[str]] = {
         "capability_bottleneck_dominant",
         "definition_shift_case_d2",
         "uncertain_boundary_case_u1",
+    ],
+    "benchmark_resource_constrained_presets": [
+        "resource_constrained_case_r1",
+        "resource_constrained_case_r2",
+        "resource_constrained_case_r3",
     ],
 }
 
