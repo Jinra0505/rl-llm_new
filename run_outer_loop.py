@@ -849,6 +849,91 @@ def _round_delta_summary(candidate_metrics: dict[str, Any], reference_metrics: d
     }
 
 
+def _build_round_trace_entry(
+    *,
+    round_id: int,
+    routing_context: dict[str, Any],
+    route: dict[str, Any],
+    planning_json: dict[str, Any],
+    round_candidates: list[dict[str, Any]],
+    best_candidate: dict[str, Any],
+    reference_metrics: dict[str, Any],
+    feedback_json: dict[str, Any],
+    stage_timings: list[dict[str, Any]],
+) -> dict[str, Any]:
+    env = routing_context.get("env_summary", {}) if isinstance(routing_context, dict) else {}
+    traj = routing_context.get("trajectory_summary", {}) if isinstance(routing_context, dict) else {}
+    candidate_entries: list[dict[str, Any]] = []
+    for rec in round_candidates:
+        metrics = rec.get("metrics", {}) if isinstance(rec.get("metrics"), dict) else {}
+        candidate_entries.append(
+            {
+                "candidate_id": str(rec.get("candidate_id", "")),
+                "style": str(rec.get("search_style", "")),
+                "file_name": str(rec.get("candidate", {}).get("file_name", "")),
+                "rationale": str(rec.get("candidate", {}).get("rationale", "")),
+                "expected_behavior": str(rec.get("candidate", {}).get("expected_behavior", "")),
+                "validation_passed": bool(rec.get("validation", {}).get("valid", False)),
+                "validation_errors": rec.get("validation", {}).get("errors", []),
+                "key_metrics": {
+                    "selection_score": _safe_float(metrics.get("selection_score", 0.0)),
+                    "min_recovery_ratio": _safe_float(metrics.get("min_recovery_ratio", 0.0)),
+                    "critical_load_recovery_ratio": _safe_float(metrics.get("critical_load_recovery_ratio", 0.0)),
+                    "communication_recovery_ratio": _safe_float(metrics.get("communication_recovery_ratio", 0.0)),
+                    "power_recovery_ratio": _safe_float(metrics.get("power_recovery_ratio", 0.0)),
+                    "road_recovery_ratio": _safe_float(metrics.get("road_recovery_ratio", 0.0)),
+                    "constraint_violation_rate_eval": _safe_float(metrics.get("constraint_violation_rate_eval", 0.0)),
+                    "invalid_action_rate_eval": _safe_float(metrics.get("invalid_action_rate_eval", metrics.get("invalid_action_rate", 0.0))),
+                    "lipschitz_mean": _safe_float(metrics.get("lipschitz_mean", 0.0)),
+                    "wait_hold_usage_eval": _safe_float(metrics.get("wait_hold_usage_eval", metrics.get("wait_hold_usage", 0.0))),
+                },
+                "delta_vs_reference": _round_delta_summary(metrics, reference_metrics),
+            }
+        )
+    return {
+        "round_id": int(round_id),
+        "routing_context_summary": {
+            "communication_recovery_ratio": _safe_float(env.get("communication_recovery_ratio", 0.0)),
+            "power_recovery_ratio": _safe_float(env.get("power_recovery_ratio", 0.0)),
+            "road_recovery_ratio": _safe_float(env.get("road_recovery_ratio", 0.0)),
+            "critical_load_shortfall": _safe_float(env.get("critical_load_shortfall", 1.0)),
+            "material_stock": _safe_float(env.get("material_stock", 0.0)),
+            "weakest_zone": str(env.get("weakest_zone", "A")),
+            "weakest_layer": str(env.get("weakest_layer", "0")),
+            "mean_progress_delta": _safe_float(traj.get("mean_progress_delta", 0.0)),
+            "constraint_violation_rate": _safe_float(traj.get("constraint_violation_rate", 0.0)),
+            "invalid_action_rate": _safe_float(traj.get("invalid_action_rate", 0.0)),
+        },
+        "route_result": {
+            "task_mode": str(route.get("task_mode", "")),
+            "confidence": _safe_float(route.get("confidence", 0.0)),
+            "dominant_signal": str(route.get("dominant_signal", "")),
+            "competing_signal": str(route.get("competing_signal", "")),
+            "reason": str(route.get("reason", "")),
+        },
+        "planning_summary": {
+            "weakest_layer": str(planning_json.get("weakest_layer", "")),
+            "weakest_zone": str(planning_json.get("weakest_zone", "")),
+            "should_reward": planning_json.get("should_reward", []),
+            "should_penalize": planning_json.get("should_penalize", []),
+            "should_avoid": planning_json.get("should_avoid", []),
+            "finishing_strategy": str(planning_json.get("finishing_strategy", "")),
+            "codegen_guidance": str(planning_json.get("codegen_guidance", "")),
+        },
+        "candidates": candidate_entries,
+        "selected_candidate_id": str(best_candidate.get("candidate_id", "")),
+        "selected_reason_summary": str(best_candidate.get("candidate", {}).get("rationale", "")),
+        "feedback_summary": {
+            "improvement_focus": feedback_json.get("improvement_focus", []),
+            "keep_signals": feedback_json.get("keep_signals", []),
+            "avoid_patterns": feedback_json.get("avoid_patterns", []),
+            "finish_strategy_adjustments": feedback_json.get("finish_strategy_adjustments", []),
+            "confidence": _safe_float(feedback_json.get("confidence", 0.0)),
+        },
+        "stage_timings_if_available": [x for x in stage_timings if int(_safe_float(x.get("round", 0), 0.0)) == int(round_id)],
+    }
+
+
 def _resolve_candidate_styles(cfg: dict[str, Any]) -> list[str]:
     styles = cfg.get("selection", {}).get("candidate_search_styles", [])
     if isinstance(styles, list):
@@ -1380,6 +1465,7 @@ def main() -> None:
     )
 
     history: list[dict[str, Any]] = []
+    outer_loop_round_traces: list[dict[str, Any]] = []
     route: dict[str, Any] = {}
     recognizer = ScenarioTaskRecognizer()
 
@@ -2188,6 +2274,20 @@ def main() -> None:
             "router_mode": args.router_mode,
         }
         (round_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        outer_loop_round_traces.append(
+            _build_round_trace_entry(
+                round_id=round_idx + 1,
+                routing_context=routing_context,
+                route=route,
+                planning_json=planning_json,
+                round_candidates=round_candidates,
+                best_candidate=best_candidate,
+                reference_metrics=round_reference_metrics,
+                feedback_json=feedback_json,
+                stage_timings=stage_timings,
+            )
+        )
+        (run_dir / "outer_loop_round_trace.json").write_text(json.dumps(outer_loop_round_traces, indent=2), encoding="utf-8")
         _write_run_status(
             run_dir,
             started_at=started_at,

@@ -249,6 +249,25 @@ def _top_lipschitz_dims(vec: np.ndarray, top_k: int = 3, reverse: bool = True) -
     return out
 
 
+def _ema(values: list[float], window: int) -> list[float]:
+    if window <= 1:
+        return [float(v) for v in values]
+    alpha = 2.0 / float(window + 1)
+    out: list[float] = []
+    ema_v = 0.0
+    for idx, v in enumerate(values):
+        x = float(v)
+        ema_v = x if idx == 0 else (alpha * x + (1.0 - alpha) * ema_v)
+        out.append(float(ema_v))
+    return out
+
+
+def _stage_bucket(stage: str) -> str:
+    if stage in {"early", "middle", "late"}:
+        return stage
+    return "middle"
+
+
 def run_training(
     revise_module_path: Path | None,
     env_name: str,
@@ -344,6 +363,11 @@ def run_training(
     lipschitz_smooth_beta = 0.20
     smoothed_lipschitz_vector = np.zeros(state_dim, dtype=np.float32)
     last_episode_lipschitz_vector = np.zeros(state_dim, dtype=np.float32)
+    training_episode_lengths: list[int] = []
+    training_episode_success_flags: list[bool] = []
+    training_steps_cumulative: list[int] = []
+    reward_components_curve: list[dict[str, float]] = []
+    training_lipschitz_curve: list[dict[str, Any]] = []
 
     for ep in range(train_episodes):
         train_opts = _resolve_reset_options("train", ep)
@@ -377,6 +401,8 @@ def run_training(
             }
         )
         ep_reward = 0.0
+        ep_steps = 0
+        ep_terminated = False
         ep_violation_count = 0
         mid_stagnation_steps = 0
         mid_wait_streak = 0
@@ -538,6 +564,7 @@ def run_training(
 
             ep_reward += r
             s = ns
+            ep_steps += 1
             global_step += 1
             train_total_steps += 1
 
@@ -546,11 +573,26 @@ def run_training(
                 ep_violation_count += 1
             if done:
                 if terminated:
+                    ep_terminated = True
                     successes += 1
                     completion_steps.append(step + 1)
                 break
 
         episode_rewards.append(ep_reward)
+        training_episode_lengths.append(int(ep_steps))
+        training_episode_success_flags.append(bool(ep_terminated))
+        training_steps_cumulative.append(int(train_total_steps))
+        reward_components_curve.append(
+            {
+                "episode_index": int(ep),
+                "ext_reward_total": float(ep_ext_component_total),
+                "intrinsic_reward_total": float(ep_intrinsic_component_total),
+                "engineered_reward_total": float(ep_engineered_component_total),
+                "engineered_bonus_total": float(ep_engineered_bonus_total),
+                "engineered_penalty_total": float(ep_engineered_penalty_total),
+                "total_reward": float(ep_reward),
+            }
+        )
         ep_lips_vec, low_sample, pair_count = _estimate_episode_lipschitz_vector(
             episode_states=episode_effective_states,
             episode_rewards=episode_composite_rewards,
@@ -561,6 +603,14 @@ def run_training(
         smoothed_lipschitz_vector = (1.0 - lipschitz_smooth_beta) * smoothed_lipschitz_vector + lipschitz_smooth_beta * ep_lips_vec
         last_episode_lipschitz_vector = ep_lips_vec
         episode_lipschitz_vectors.append([float(x) for x in ep_lips_vec.tolist()])
+        training_lipschitz_curve.append(
+            {
+                "episode_index": int(ep),
+                "episode_lipschitz_mean": float(np.mean(ep_lips_vec)) if ep_lips_vec.size else 0.0,
+                "episode_lipschitz_pair_count": int(pair_count),
+                "low_sample_flag": bool(low_sample),
+            }
+        )
         train_component_ext_total = locals().get("train_component_ext_total", 0.0) + ep_ext_component_total
         train_component_intrinsic_total = locals().get("train_component_intrinsic_total", 0.0) + ep_intrinsic_component_total
         train_component_engineered_total = locals().get("train_component_engineered_total", 0.0) + ep_engineered_component_total
@@ -611,6 +661,12 @@ def run_training(
     late_stage_coordinated_steps = 0
     representative_eval_trace: list[dict[str, Any]] = []
     representative_eval_summary: dict[str, Any] = {}
+    stage_categories = ["road", "power", "comm", "mes", "feeder", "coordinated", "wait"]
+    stage_action_counts_eval: dict[str, Counter[str]] = {
+        "early": Counter({k: 0 for k in stage_categories}),
+        "middle": Counter({k: 0 for k in stage_categories}),
+        "late": Counter({k: 0 for k in stage_categories}),
+    }
 
     for ep in range(eval_episodes):
         eval_opts = _resolve_reset_options("eval", ep)
@@ -682,6 +738,9 @@ def run_training(
             eval_stage_counts[str(info.get("stage", "unknown"))] += 1
             eval_weakest_zone_counts[str(info.get("weakest_zone", "A"))] += 1
             eval_weakest_layer_counts[str(info.get("weakest_layer", "0"))] += 1
+            stage_key = _stage_bucket(str(info.get("stage", "middle")))
+            action_cat = _action_category(a)
+            stage_action_counts_eval[stage_key][action_cat] += 1
             if str(info.get("stage", "middle")) == "late":
                 late_stage_steps_total += 1
                 if a in {3, 4, 5, 6, 7, 8}:
@@ -690,16 +749,27 @@ def run_training(
                     late_stage_coordinated_steps += 1
             if a in {9, 10, 11}:
                 ep_mes_moves += 1
-            if ep == 0 and step_idx < 12:
+            if ep == 0:
                 episode_trace.append(
                     {
-                        "step": step_idx,
-                        "action": a,
+                        "step": int(step_idx),
+                        "action": int(a),
+                        "action_category": action_cat,
                         "progress_delta": float(info.get("progress_delta", 0.0)),
                         "stage": str(info.get("stage", "unknown")),
                         "invalid_action": bool(info.get("invalid_action", False)),
-                        "invalid_reason": str(info.get("invalid_reason", "")),
                         "constraint_violation": bool(info.get("constraint_violation", False)),
+                        "communication_recovery_ratio": float(info.get("communication_recovery_ratio", 0.0)),
+                        "power_recovery_ratio": float(info.get("power_recovery_ratio", 0.0)),
+                        "road_recovery_ratio": float(info.get("road_recovery_ratio", 0.0)),
+                        "critical_load_recovery_ratio": float(info.get("critical_load_recovery_ratio", 0.0)),
+                        "backbone_comm_ratio": float(info.get("backbone_comm_ratio", info.get("communication_recovery_ratio", 0.0))),
+                        "backbone_power_ratio": float(info.get("backbone_power_ratio", info.get("power_recovery_ratio", 0.0))),
+                        "backbone_road_ratio": float(info.get("backbone_road_ratio", info.get("road_recovery_ratio", 0.0))),
+                        "material_stock": float(info.get("material_stock", 0.0)),
+                        "mes_soc": float(info.get("mes_soc", 0.0)),
+                        "weakest_zone": str(info.get("weakest_zone", "A")),
+                        "weakest_layer": str(info.get("weakest_layer", "0")),
                     }
                 )
             s = ns
@@ -781,6 +851,38 @@ def run_training(
     lipschitz_mean = float(np.mean(lips_final_vec)) if lips_final_vec.size else 0.0
     lipschitz_max = float(np.max(lips_final_vec)) if lips_final_vec.size else 0.0
     lipschitz_min = float(np.min(lips_final_vec)) if lips_final_vec.size else 0.0
+    episode_reward_ema_5 = _ema(episode_rewards, 5)
+    episode_reward_ema_10 = _ema(episode_rewards, 10)
+    training_curve = [
+        {
+            "episode_index": int(ep_idx),
+            "episode_reward": float(episode_rewards[ep_idx]),
+            "episode_reward_ema_5": float(episode_reward_ema_5[ep_idx]),
+            "episode_reward_ema_10": float(episode_reward_ema_10[ep_idx]),
+            "train_total_steps_cumulative": int(training_steps_cumulative[ep_idx]) if ep_idx < len(training_steps_cumulative) else 0,
+            "episode_length": int(training_episode_lengths[ep_idx]) if ep_idx < len(training_episode_lengths) else 0,
+            "episode_success_flag": bool(training_episode_success_flags[ep_idx]) if ep_idx < len(training_episode_success_flags) else False,
+        }
+        for ep_idx in range(len(episode_rewards))
+    ]
+    stage_action_summary_eval: dict[str, dict[str, Any]] = {}
+    for stage_name in ("early", "middle", "late"):
+        counts = {k: int(stage_action_counts_eval[stage_name].get(k, 0)) for k in stage_categories}
+        total_stage_actions = int(sum(counts.values()))
+        ratios = {k: float(v) / float(max(1, total_stage_actions)) for k, v in counts.items()}
+        stage_action_summary_eval[stage_name] = {
+            "counts": counts,
+            "ratios": ratios,
+            "total_actions": total_stage_actions,
+        }
+    representative_eval_trace_meta = {
+        "episode_index": 0,
+        "terminated": bool(representative_eval_summary.get("terminated", False)),
+        "truncated": bool(representative_eval_summary.get("truncated", False)),
+        "total_steps": int(representative_eval_summary.get("steps", len(representative_eval_trace))),
+        "final_selection_score_proxy_if_available": float(eval_success_rate),
+        "note": "Representative trace from first evaluation episode.",
+    }
     benchmark_modes_used = sorted({str(x.get("benchmark_mode", "off")) for x in benchmark_meta_obs if x.get("benchmark_mode", "")})
     preset_names_used = sorted({str(x.get("preset_name", "")) for x in benchmark_meta_obs if x.get("preset_name", "")})
     preset_groups_used = sorted({str(x.get("preset_group", "")) for x in benchmark_meta_obs if x.get("preset_group", "")})
@@ -877,7 +979,12 @@ def run_training(
         },
         "invalid_reason_counts_eval": dict(eval_invalid_reason_counts),
         "representative_eval_trace": representative_eval_trace,
+        "representative_eval_trace_meta": representative_eval_trace_meta,
         "representative_eval_summary": representative_eval_summary,
+        "stage_action_summary_eval": stage_action_summary_eval,
+        "training_curve": training_curve,
+        "reward_components_curve": reward_components_curve,
+        "training_lipschitz_curve": training_lipschitz_curve,
         "eval_trajectory_summary": {
             "mean_steps": float(np.mean(eval_steps_per_episode)) if eval_steps_per_episode else 0.0,
             "terminated_rate": eval_terminated_count / float(max(1, eval_episodes)),
