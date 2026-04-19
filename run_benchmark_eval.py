@@ -172,8 +172,13 @@ def run_outer_pipeline(mode: str, seed: int, reward_mode: str, split_name: str, 
     cfg_path.write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
 
     outer_cfg = cfg.get("outer_loop", {}) if isinstance(cfg.get("outer_loop"), dict) else {}
-    rounds = "1" if mode == "single_shot_llm" else str(int(outer_cfg.get("rounds", 2)))
-    candidates = "1" if mode == "single_shot_llm" else str(int(outer_cfg.get("candidates_per_round", 2)))
+    if mode == "single_shot_llm":
+        rounds = "1"
+        candidates = "1"
+    else:
+        # Keep full outer-loop materially different from single-shot.
+        rounds = str(max(2, int(outer_cfg.get("rounds", 2))))
+        candidates = str(max(1, int(outer_cfg.get("candidates_per_round", 2))))
     before = {p.name for p in run_root.glob("run_*") if p.is_dir()}
     cmd = [
         "python3",
@@ -194,7 +199,17 @@ def run_outer_pipeline(mode: str, seed: int, reward_mode: str, split_name: str, 
         "--config",
         str(cfg_path),
     ]
-    subprocess.run(cmd, check=True, capture_output=True, text=True)
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as exc:
+        err_tail = (exc.stderr or "").strip()[-3000:]
+        out_tail = (exc.stdout or "").strip()[-1000:]
+        raise RuntimeError(
+            "Outer-loop subprocess failed.\n"
+            f"cmd={' '.join(cmd)}\n"
+            f"stdout_tail:\n{out_tail}\n"
+            f"stderr_tail:\n{err_tail}"
+        ) from exc
     all_runs = sorted([p for p in run_root.glob("run_*") if p.is_dir()])
     candidate_runs = [p for p in all_runs if p.name not in before] or all_runs
     latest = None
@@ -278,6 +293,9 @@ def main() -> None:
             eval_max_steps,
         )
 
+    outer_cfg = cfg.get("outer_loop", {}) if isinstance(cfg.get("outer_loop"), dict) else {}
+    summary_rounds = 1 if args.mode == "single_shot_llm" else max(2, int(outer_cfg.get("rounds", 2)))
+    summary_candidates = 1 if args.mode == "single_shot_llm" else max(1, int(outer_cfg.get("candidates_per_round", 2)))
     summary = {
         "mode": args.mode,
         "seed": int(args.seed),
@@ -286,14 +304,19 @@ def main() -> None:
         "eval_budget_mode": eval_budget_mode,
         "train_max_steps": int(metrics.get("train_max_steps", cfg.get("env", {}).get("max_steps", eval_max_steps))),
         "eval_max_steps": int(eval_max_steps),
-        "rounds": 1 if args.mode == "single_shot_llm" else 2,
-        "candidates_per_round": 1 if args.mode == "single_shot_llm" else 2,
+        "rounds": int(summary_rounds),
+        "candidates_per_round": int(summary_candidates),
         "selection_score": float(metrics.get("selection_score", 0.0)),
         "min_recovery_ratio": float(metrics.get("min_recovery_ratio", 0.0)),
         "constraint_violation_rate_eval": float(metrics.get("constraint_violation_rate_eval", 0.0)),
         "invalid_action_rate_eval": float(metrics.get("invalid_action_rate_eval", metrics.get("invalid_action_rate", 0.0))),
         "lipschitz_mean": float(metrics.get("lipschitz_mean", 0.0)),
         "wait_hold_usage_eval": float(metrics.get("wait_hold_usage_eval", metrics.get("wait_hold_usage", 0.0))),
+        "eval_success_rate": float(metrics.get("eval_success_rate", metrics.get("success_rate", 0.0))),
+        "eval_terminated_count": int(metrics.get("eval_terminated_count", 0)),
+        "eval_truncated_count": int(metrics.get("eval_truncated_count", 0)),
+        "completion_window_entries": float(metrics.get("completion_window_entries", 0.0)),
+        "late_finish_action_share_eval": float(metrics.get("late_finish_action_share_eval", 0.0)),
         "completed": bool(metrics.get("completed", True)),
         "failed": bool(metrics.get("failed", False)),
         "output_json": str(out_path),

@@ -78,6 +78,11 @@ def _extract_metrics(payload: dict[str, Any]) -> dict[str, float]:
         "constraint_violation_rate_eval": float(payload.get("constraint_violation_rate_eval", 0.0)),
         "invalid_action_rate_eval": float(payload.get("invalid_action_rate_eval", 0.0)),
         "wait_hold_usage_eval": float(payload.get("wait_hold_usage_eval", 0.0)),
+        "eval_success_rate": float(payload.get("eval_success_rate", payload.get("success_rate", 0.0))),
+        "eval_terminated_count": float(payload.get("eval_terminated_count", 0.0)),
+        "eval_truncated_count": float(payload.get("eval_truncated_count", 0.0)),
+        "completion_window_entries": float(payload.get("completion_window_entries", 0.0)),
+        "late_finish_action_share_eval": float(payload.get("late_finish_action_share_eval", 0.0)),
     }
 
 
@@ -88,6 +93,11 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, float]:
         "constraint_violation_rate_eval",
         "invalid_action_rate_eval",
         "wait_hold_usage_eval",
+        "eval_success_rate",
+        "eval_terminated_count",
+        "eval_truncated_count",
+        "completion_window_entries",
+        "late_finish_action_share_eval",
     ]
     return {f"mean_{k}": mean(float(r[k]) for r in rows) if rows else 0.0 for k in keys}
 
