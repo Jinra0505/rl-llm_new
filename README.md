@@ -17,6 +17,11 @@ After recognition, you may optionally run:
 **Task override logic is removed.**
 The recognized task comes directly from task recognition output (rule mode or LLM classification output) and is not post-corrected by forced engineering overrides.
 
+## Installation
+```bash
+python -m pip install -r requirements.txt
+```
+
 ## Project structure
 - `task_recognition_prompt.py`: builds recognition prompt from scenario summary.
 - `task_recognizer.py`: three-task recognizer (rule + LLM).
