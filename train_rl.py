@@ -370,6 +370,9 @@ def run_training(
     env_reset_options: dict[str, Any] | None | callable = None,
     reward_mode: str | None = None,
     phase_contract: dict[str, Any] | None = None,
+    train_max_steps_per_episode: int | None = None,
+    eval_max_steps_per_episode: int | None = None,
+    eval_budget_mode: str = "standard_eval",
 ) -> dict[str, Any]:
     if str(llm_mode).lower() != "real":
         raise RuntimeError(f"Formal run requires llm_mode=real, got: {llm_mode}")
@@ -387,7 +390,10 @@ def run_training(
         intrinsic_reward_fn = lambda state, action, next_state, info=None, revised_state=None: 0.0
         reward_controls = _normalize_reward_controls({})
 
-    env = ProjectRecoveryEnv(max_steps=max_steps_per_episode, seed=seed, severity=severity)
+    default_steps = int(max_steps_per_episode if max_steps_per_episode is not None else 60)
+    train_steps = int(train_max_steps_per_episode if train_max_steps_per_episode is not None else default_steps)
+    eval_steps = int(eval_max_steps_per_episode if eval_max_steps_per_episode is not None else default_steps)
+    env = ProjectRecoveryEnv(max_steps=max(train_steps, eval_steps), seed=seed, severity=severity)
     normalized_phase_contract = _normalize_phase_contract(phase_contract)
     action_dim = int(env.action_space.n)
 
@@ -493,7 +499,7 @@ def run_training(
         ep_engineered_bonus_total = 0.0
         ep_engineered_penalty_total = 0.0
 
-        for step in range(max_steps_per_episode):
+        for step in range(train_steps):
             rs = _effective_state(_call_revise(revise_state_fn, s, info), max_revised_dim)
             valid_mask = _valid_action_mask(action_dim, info)
             valid_mask = _phase_adjusted_mask(valid_mask, info, normalized_phase_contract, step)
@@ -513,6 +519,9 @@ def run_training(
                     qvals = q_net(torch.tensor(rs, dtype=torch.float32).unsqueeze(0))
                     qarr = qvals.squeeze(0).cpu().numpy()
                     qarr += _phase_q_bias(action_dim, info, normalized_phase_contract, step)
+                    if eval_budget_mode == "completion_budget_eval":
+                        qarr[3:12] += 0.04
+                        qarr[14] -= 0.06
                     qarr[~valid_mask] = -1e9
                     a = int(np.argmax(qarr))
             phase_action_match_train += int(a == int(np.argmax(_phase_q_bias(action_dim, info, normalized_phase_contract, step))))
@@ -539,7 +548,7 @@ def run_training(
             stage_prev = str(info.get("stage", "middle"))
             stage_next = "late" if float(ns[22]) >= 0.99 else ("middle" if float(ns[22]) >= 0.49 else "early")
             enter_late_bonus = 0.8 if (stage_prev != "late" and stage_next == "late") else 0.0
-            step_ratio = float(step + 1) / float(max_steps_per_episode)
+            step_ratio = float(step + 1) / float(max(1, train_steps))
             late_factor = 1.0 + max(0.0, (step_ratio - 0.60) / 0.40) * 1.4
             invalid_penalty = (0.20 + 0.35 * late_factor) if bool(info.get("invalid_action", False)) else 0.0
             constraint_penalty = (0.25 + 0.45 * late_factor) if bool(info.get("constraint_violation", False)) else 0.0
@@ -753,6 +762,8 @@ def run_training(
     late_stage_coordinated_steps = 0
     representative_eval_trace: list[dict[str, Any]] = []
     representative_eval_summary: dict[str, Any] = {}
+    completion_window_entries = 0
+    late_finish_action_count = 0
 
     for ep in range(eval_episodes):
         eval_opts = _resolve_reset_options("eval", ep)
@@ -795,7 +806,7 @@ def run_training(
         terminated = False
         truncated = False
         episode_trace: list[dict[str, Any]] = []
-        for step_idx in range(max_steps_per_episode):
+        for step_idx in range(eval_steps):
             rs = _effective_state(_call_revise(revise_state_fn, s, info), max_revised_dim)
             valid_mask = _valid_action_mask(action_dim, info)
             valid_mask = _phase_adjusted_mask(valid_mask, info, normalized_phase_contract, step_idx)
@@ -809,6 +820,9 @@ def run_training(
                 qvals = q_net(torch.tensor(rs, dtype=torch.float32).unsqueeze(0))
                 qarr = qvals.squeeze(0).cpu().numpy()
                 qarr += _phase_q_bias(action_dim, info, normalized_phase_contract, step_idx)
+                if eval_budget_mode == "completion_budget_eval":
+                    qarr[3:12] += 0.08
+                    qarr[14] -= 0.12
                 qarr[~valid_mask] = -1e9
                 a = int(np.argmax(qarr))
             phase_action_match_eval += int(a == int(np.argmax(_phase_q_bias(action_dim, info, normalized_phase_contract, step_idx))))
@@ -829,10 +843,13 @@ def run_training(
             eval_weakest_layer_counts[str(info.get("weakest_layer", "0"))] += 1
             if str(info.get("stage", "middle")) == "late":
                 late_stage_steps_total += 1
+                completion_window_entries += int(bool(info.get("safe_completion_window", False)))
                 if a in {3, 4, 5, 6, 7, 8}:
                     late_stage_targeted_steps += 1
                 if a == 13:
                     late_stage_coordinated_steps += 1
+                if str(normalized_phase_contract.get("phase_mode", "balanced_progress")) == "late_finish" and a in {3, 4, 5, 6, 7, 8, 9, 10, 11}:
+                    late_finish_action_count += 1
             if a in {9, 10, 11}:
                 ep_mes_moves += 1
             if ep == 0 and step_idx < 12:
@@ -944,7 +961,7 @@ def run_training(
         "critical_load_recovery_ratio": float(np.mean(crit_scores)) if crit_scores else 0.0,
         "min_recovery_ratio": min_recovery_ratio,
         "critical_load_shortfall": float(max(0.0, 1.0 - (float(np.mean(crit_scores)) if crit_scores else 0.0))),
-        "recovery_completion_time": float(np.mean(completion_steps)) if completion_steps else float(max_steps_per_episode),
+        "recovery_completion_time": float(np.mean(completion_steps)) if completion_steps else float(eval_steps),
         "cumulative_reward_mean": float(np.mean(episode_rewards)) if episode_rewards else 0.0,
         "constraint_violation_count": int(eval_total_violation_count),
         "constraint_violation_rate": eval_violation_rate,
@@ -994,6 +1011,11 @@ def run_training(
         "phase_mode_used": str(normalized_phase_contract.get("phase_mode", "balanced_progress")),
         "phase_action_match_rate_train": float(phase_action_match_train) / float(max(1, train_total_steps)),
         "phase_action_match_rate_eval": float(phase_action_match_eval) / float(max(1, eval_total_steps)),
+        "completion_window_entries": int(completion_window_entries),
+        "late_finish_action_share_eval": float(late_finish_action_count) / float(max(1, late_stage_steps_total)),
+        "train_max_steps": int(train_steps),
+        "eval_max_steps": int(eval_steps),
+        "eval_budget_mode": str(eval_budget_mode),
         "llm_mode_used": "real",
         "reward_mode": reward_mode_resolved,
         "reward_controls": dict(reward_controls),

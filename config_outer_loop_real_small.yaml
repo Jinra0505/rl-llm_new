@@ -76,12 +76,13 @@ selection:
     - aggressive_recovery_first
   task_mode_metric_weights:
     __global__:
-      eval_success_rate: 0.48
-      critical_load_recovery_ratio: 0.24
-      min_recovery_ratio: 0.18
+      eval_success_rate: 0.22
+      critical_load_recovery_ratio: 0.22
+      min_recovery_ratio: 0.22
       mean_progress_delta_eval: 0.16
-      constraint_violation_rate_eval: -0.18
-      late_stage_targeted_action_rate: 0.1
+      constraint_violation_rate_eval: -0.26
+      invalid_action_rate_eval: -0.18
+      late_stage_targeted_action_rate: 0.12
   stability_guard:
     enabled: true
     small_score_gain_max: 0.02

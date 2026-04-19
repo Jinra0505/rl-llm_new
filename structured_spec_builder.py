@@ -210,6 +210,7 @@ def build_module_payload(spec: dict[str, Any], file_name: str, rationale: str = 
     code = f'''import numpy as np
 
 SPEC = {s!r}
+PHASE_CONTRACT = {phase_contract!r}
 REWARD_CONTROLS = {reward_controls!r}
 
 def revise_state(state, info=None):

@@ -121,12 +121,15 @@ def build_reset_options(*, benchmark_mode: str, split_name: str, preset_group: s
 def run_baseline(seed: int, reward_mode: str, split_name: str, preset_group: str, preset_name: str, preset_jitter: float, severity: str, out_path: Path, cfg: dict[str, Any], eval_budget_mode: str, eval_max_steps: int) -> dict[str, Any]:
     dqn_cfg = dict(cfg["training"])
     dqn_cfg["reward_mode"] = reward_mode
+    train_max_steps = int(cfg["env"].get("max_steps", 60))
     metrics = run_training(
         revise_module_path=Path("baseline_noop.py"),
         env_name=str(cfg["env"]["name"]),
         train_episodes=int(dqn_cfg.get("train_episodes", 20)),
         eval_episodes=int(dqn_cfg.get("eval_episodes", 6)),
-        max_steps_per_episode=int(eval_max_steps),
+        max_steps_per_episode=train_max_steps,
+        train_max_steps_per_episode=train_max_steps,
+        eval_max_steps_per_episode=int(eval_max_steps),
         gamma=float(dqn_cfg.get("gamma", 0.98)),
         task_mode="global_efficiency_priority",
         llm_mode="real",
@@ -144,7 +147,9 @@ def run_baseline(seed: int, reward_mode: str, split_name: str, preset_group: str
             preset_jitter=preset_jitter,
             severity=severity,
         ),
+        eval_budget_mode=eval_budget_mode,
     )
+    metrics["train_max_steps"] = train_max_steps
     metrics["eval_budget_mode"] = eval_budget_mode
     metrics["eval_max_steps"] = int(eval_max_steps)
     return metrics
@@ -159,10 +164,10 @@ def run_outer_pipeline(mode: str, seed: int, reward_mode: str, split_name: str, 
     cfg["benchmark"]["preset_jitter"] = preset_jitter
     cfg["benchmark"]["fixed_severity"] = severity
     cfg["scenario"]["severity"] = severity
-    cfg["env"]["max_steps"] = int(eval_max_steps)
     run_root = out_path.parent / "outer_loop_runs"
     run_root.mkdir(parents=True, exist_ok=True)
     cfg["paths"]["outputs_dir"] = str(run_root)
+    cfg["benchmark_runtime"] = {"eval_max_steps": int(eval_max_steps), "eval_budget_mode": eval_budget_mode}
     cfg_path = out_path.parent / f"tmp_cfg_{mode}_{split_name}_{eval_budget_mode}_seed{seed}.yaml"
     cfg_path.write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
 
@@ -278,6 +283,7 @@ def main() -> None:
         "split_name": args.split_name,
         "reward_mode": args.reward_mode,
         "eval_budget_mode": eval_budget_mode,
+        "train_max_steps": int(metrics.get("train_max_steps", cfg.get("env", {}).get("max_steps", eval_max_steps))),
         "eval_max_steps": int(eval_max_steps),
         "rounds": 1 if args.mode == "single_shot_llm" else 2,
         "candidates_per_round": 1 if args.mode == "single_shot_llm" else 2,

@@ -18,7 +18,7 @@ import yaml
 from llm_client import LLMClient
 from mock_recovery_env import ProjectRecoveryEnv
 from prompts import COMPACT_PLANNING_PROMPT, FEEDBACK_PROMPT, PLANNING_PROMPT, STRUCTURED_SPEC_PROMPT, SYSTEM_PROMPT
-from structured_spec_builder import build_module_payload, normalize_spec
+from structured_spec_builder import build_module_payload, normalize_phase_contract, normalize_spec
 from task_recognizer import ScenarioTaskRecognizer, summarize_trajectory
 from train_rl import run_training
 
@@ -537,6 +537,7 @@ def validate_candidate_payload(payload: dict[str, Any], max_revised_dim: int | N
         "code": code,
         "expected_behavior": str(payload.get("expected_behavior", "")),
         "structured_spec": payload.get("structured_spec", {}),
+        "phase_contract": payload.get("phase_contract", {}),
     }
 
     if not file_name.endswith(".py"):
@@ -599,6 +600,9 @@ def validate_structured_spec_payload(payload: dict[str, Any], task_mode: str) ->
         raw_spec = {}
     style = str(payload.get("style", raw_spec.get("style", "balanced")))
     normalized_spec = normalize_spec(raw_spec, style=style, task_mode=task_mode)
+    phase_raw = payload.get("phase_contract", raw_spec)
+    normalized_phase = normalize_phase_contract(phase_raw if isinstance(phase_raw, dict) else {})
+    normalized_spec["phase_contract"] = dict(normalized_phase)
     built_payload = build_module_payload(
         normalized_spec,
         file_name=file_name,
@@ -1010,91 +1014,6 @@ def _round_delta_summary(candidate_metrics: dict[str, Any], reference_metrics: d
     }
 
 
-def _build_round_trace_entry(
-    *,
-    round_id: int,
-    routing_context: dict[str, Any],
-    route: dict[str, Any],
-    planning_json: dict[str, Any],
-    round_candidates: list[dict[str, Any]],
-    best_candidate: dict[str, Any],
-    reference_metrics: dict[str, Any],
-    feedback_json: dict[str, Any],
-    stage_timings: list[dict[str, Any]],
-) -> dict[str, Any]:
-    env = routing_context.get("env_summary", {}) if isinstance(routing_context, dict) else {}
-    traj = routing_context.get("trajectory_summary", {}) if isinstance(routing_context, dict) else {}
-    candidate_entries: list[dict[str, Any]] = []
-    for rec in round_candidates:
-        metrics = rec.get("metrics", {}) if isinstance(rec.get("metrics"), dict) else {}
-        candidate_entries.append(
-            {
-                "candidate_id": str(rec.get("candidate_id", "")),
-                "style": str(rec.get("search_style", "")),
-                "file_name": str(rec.get("candidate", {}).get("file_name", "")),
-                "rationale": str(rec.get("candidate", {}).get("rationale", "")),
-                "expected_behavior": str(rec.get("candidate", {}).get("expected_behavior", "")),
-                "validation_passed": bool(rec.get("validation", {}).get("valid", False)),
-                "validation_errors": rec.get("validation", {}).get("errors", []),
-                "key_metrics": {
-                    "selection_score": _safe_float(metrics.get("selection_score", 0.0)),
-                    "min_recovery_ratio": _safe_float(metrics.get("min_recovery_ratio", 0.0)),
-                    "critical_load_recovery_ratio": _safe_float(metrics.get("critical_load_recovery_ratio", 0.0)),
-                    "communication_recovery_ratio": _safe_float(metrics.get("communication_recovery_ratio", 0.0)),
-                    "power_recovery_ratio": _safe_float(metrics.get("power_recovery_ratio", 0.0)),
-                    "road_recovery_ratio": _safe_float(metrics.get("road_recovery_ratio", 0.0)),
-                    "constraint_violation_rate_eval": _safe_float(metrics.get("constraint_violation_rate_eval", 0.0)),
-                    "invalid_action_rate_eval": _safe_float(metrics.get("invalid_action_rate_eval", metrics.get("invalid_action_rate", 0.0))),
-                    "lipschitz_mean": _safe_float(metrics.get("lipschitz_mean", 0.0)),
-                    "wait_hold_usage_eval": _safe_float(metrics.get("wait_hold_usage_eval", metrics.get("wait_hold_usage", 0.0))),
-                },
-                "delta_vs_reference": _round_delta_summary(metrics, reference_metrics),
-            }
-        )
-    return {
-        "round_id": int(round_id),
-        "routing_context_summary": {
-            "communication_recovery_ratio": _safe_float(env.get("communication_recovery_ratio", 0.0)),
-            "power_recovery_ratio": _safe_float(env.get("power_recovery_ratio", 0.0)),
-            "road_recovery_ratio": _safe_float(env.get("road_recovery_ratio", 0.0)),
-            "critical_load_shortfall": _safe_float(env.get("critical_load_shortfall", 1.0)),
-            "material_stock": _safe_float(env.get("material_stock", 0.0)),
-            "weakest_zone": str(env.get("weakest_zone", "A")),
-            "weakest_layer": str(env.get("weakest_layer", "0")),
-            "mean_progress_delta": _safe_float(traj.get("mean_progress_delta", 0.0)),
-            "constraint_violation_rate": _safe_float(traj.get("constraint_violation_rate", 0.0)),
-            "invalid_action_rate": _safe_float(traj.get("invalid_action_rate", 0.0)),
-        },
-        "route_result": {
-            "task_mode": str(route.get("task_mode", "")),
-            "confidence": _safe_float(route.get("confidence", 0.0)),
-            "dominant_signal": str(route.get("dominant_signal", "")),
-            "competing_signal": str(route.get("competing_signal", "")),
-            "reason": str(route.get("reason", "")),
-        },
-        "planning_summary": {
-            "weakest_layer": str(planning_json.get("weakest_layer", "")),
-            "weakest_zone": str(planning_json.get("weakest_zone", "")),
-            "should_reward": planning_json.get("should_reward", []),
-            "should_penalize": planning_json.get("should_penalize", []),
-            "should_avoid": planning_json.get("should_avoid", []),
-            "finishing_strategy": str(planning_json.get("finishing_strategy", "")),
-            "codegen_guidance": str(planning_json.get("codegen_guidance", "")),
-        },
-        "candidates": candidate_entries,
-        "selected_candidate_id": str(best_candidate.get("candidate_id", "")),
-        "selected_reason_summary": str(best_candidate.get("candidate", {}).get("rationale", "")),
-        "feedback_summary": {
-            "improvement_focus": feedback_json.get("improvement_focus", []),
-            "keep_signals": feedback_json.get("keep_signals", []),
-            "avoid_patterns": feedback_json.get("avoid_patterns", []),
-            "finish_strategy_adjustments": feedback_json.get("finish_strategy_adjustments", []),
-            "confidence": _safe_float(feedback_json.get("confidence", 0.0)),
-        },
-        "stage_timings_if_available": [x for x in stage_timings if int(_safe_float(x.get("round", 0), 0.0)) == int(round_id)],
-    }
-
-
 def _resolve_candidate_styles(cfg: dict[str, Any]) -> list[str]:
     styles = cfg.get("selection", {}).get("candidate_search_styles", [])
     if isinstance(styles, list):
@@ -1245,6 +1164,14 @@ def _build_benchmark_reset_options(cfg: dict[str, Any]) -> dict[str, Any] | None
         return out
 
     return _resolver
+
+
+def _resolve_train_eval_horizons(cfg: dict[str, Any]) -> tuple[int, int, str]:
+    train_steps = int(cfg.get("env", {}).get("max_steps", 60))
+    runtime = cfg.get("benchmark_runtime", {}) if isinstance(cfg.get("benchmark_runtime"), dict) else {}
+    eval_steps = int(runtime.get("eval_max_steps", train_steps))
+    eval_budget_mode = str(runtime.get("eval_budget_mode", "standard_eval"))
+    return train_steps, eval_steps, eval_budget_mode
 
 
 def select_best_candidate(
@@ -1626,7 +1553,6 @@ def main() -> None:
     )
 
     history: list[dict[str, Any]] = []
-    outer_loop_round_traces: list[dict[str, Any]] = []
     route: dict[str, Any] = {}
     recognizer = ScenarioTaskRecognizer()
 
@@ -1833,6 +1759,7 @@ def main() -> None:
             planning_json,
             previous_feedback=(history[-1].get("llm_feedback", {}) if history else None),
         )
+        train_max_steps, eval_max_steps, eval_budget_mode = _resolve_train_eval_horizons(cfg)
 
         round_candidates: list[dict[str, Any]] = []
         candidate_styles = _resolve_candidate_styles(cfg)
@@ -1911,6 +1838,8 @@ def main() -> None:
                         "repaired_from_raw": repaired,
                     }
                     break
+                if isinstance(parsed, dict) and "phase_contract" not in parsed:
+                    parsed["phase_contract"] = dict(phase_contract)
                 report = validate_structured_spec_payload(parsed, task_mode=str(route.get("task_mode", "global_efficiency_priority")))
                 if report.get("valid", False):
                     report = validate_candidate_payload(
@@ -1961,7 +1890,9 @@ def main() -> None:
                     env_name=args.env,
                     train_episodes=int(cfg["training"]["train_episodes"]),
                     eval_episodes=int(cfg["training"]["eval_episodes"]),
-                    max_steps_per_episode=int(cfg["env"]["max_steps"]),
+                    max_steps_per_episode=int(train_max_steps),
+                    train_max_steps_per_episode=int(train_max_steps),
+                    eval_max_steps_per_episode=int(eval_max_steps),
                     gamma=float(cfg["training"]["gamma"]),
                     task_mode=route["task_mode"],
                     llm_mode="real",
@@ -1975,6 +1906,7 @@ def main() -> None:
                     intrinsic_scale=args.intrinsic_scale,
                     env_reset_options=_build_benchmark_reset_options(cfg),
                     phase_contract=phase_contract,
+                    eval_budget_mode=eval_budget_mode,
                 )
                 metrics["selected_task"] = route.get("task_mode")
                 metrics["llm_effective_mode"] = client.effective_mode()
@@ -2044,7 +1976,9 @@ def main() -> None:
                 env_name=args.env,
                 train_episodes=int(cfg["training"]["train_episodes"]),
                 eval_episodes=int(cfg["training"]["eval_episodes"]),
-                max_steps_per_episode=int(cfg["env"]["max_steps"]),
+                max_steps_per_episode=int(train_max_steps),
+                train_max_steps_per_episode=int(train_max_steps),
+                eval_max_steps_per_episode=int(eval_max_steps),
                 gamma=float(cfg["training"]["gamma"]),
                 task_mode=route["task_mode"],
                 llm_mode="real",
@@ -2062,6 +1996,7 @@ def main() -> None:
                 intrinsic_scale=args.intrinsic_scale,
                 env_reset_options=_build_benchmark_reset_options(cfg),
                 phase_contract=phase_contract,
+                eval_budget_mode=eval_budget_mode,
             )
             anchor_metrics["selected_task"] = route.get("task_mode")
             anchor_metrics["llm_effective_mode"] = "deterministic_anchor"
@@ -2120,7 +2055,9 @@ def main() -> None:
                 env_name=args.env,
                 train_episodes=int(cfg["training"]["train_episodes"]),
                 eval_episodes=int(cfg["training"]["eval_episodes"]),
-                max_steps_per_episode=int(cfg["env"]["max_steps"]),
+                max_steps_per_episode=int(train_max_steps),
+                train_max_steps_per_episode=int(train_max_steps),
+                eval_max_steps_per_episode=int(eval_max_steps),
                 gamma=float(cfg["training"]["gamma"]),
                 task_mode=route["task_mode"],
                 llm_mode="real",
@@ -2138,6 +2075,7 @@ def main() -> None:
                 intrinsic_scale=1.0,
                 env_reset_options=_build_benchmark_reset_options(cfg),
                 phase_contract=phase_contract,
+                eval_budget_mode=eval_budget_mode,
             )
             attempt_metrics["backstop_seed"] = backstop_seed
             attempt_metrics["is_strict_safe"] = bool(
@@ -2248,13 +2186,17 @@ def main() -> None:
         )
         t0_feedback = time.time()
         if args.disable_feedback:
-            feedback_json = {
+            raw_feedback_fallback = {
                 "improvement_focus": ["feedback disabled"],
                 "keep_signals": [],
                 "avoid_patterns": [],
                 "finish_strategy_adjustments": [],
+                "phase_guidance": "keep",
+                "next_phase_mode": str(phase_contract.get("phase_mode", "balanced_progress")),
+                "next_phase_duration": int(phase_contract.get("phase_duration", 8)),
                 "confidence": 1.0,
             }
+            feedback_json, feedback_normalization_notes, feedback_normalized = _normalize_feedback_obj(raw_feedback_fallback)
         else:
             feedback_json = {}
             feedback_error: Exception | None = None
@@ -2447,20 +2389,6 @@ def main() -> None:
             "router_mode": args.router_mode,
         }
         (round_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
-        outer_loop_round_traces.append(
-            _build_round_trace_entry(
-                round_id=round_idx + 1,
-                routing_context=routing_context,
-                route=route,
-                planning_json=planning_json,
-                round_candidates=round_candidates,
-                best_candidate=best_candidate,
-                reference_metrics=round_reference_metrics,
-                feedback_json=feedback_json,
-                stage_timings=stage_timings,
-            )
-        )
-        (run_dir / "outer_loop_round_trace.json").write_text(json.dumps(outer_loop_round_traces, indent=2), encoding="utf-8")
         _write_run_status(
             run_dir,
             started_at=started_at,
