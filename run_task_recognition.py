@@ -377,7 +377,8 @@ def eval_set(samples: list[dict[str, Any]], mode: str, recognizer: ScenarioTaskR
     y_pred: list[str] = []
     second_pass_used = 0
     hybrid_used_llm = 0
-    for s in samples:
+    sample_predictions: list[dict[str, Any]] = []
+    for sample_idx, s in enumerate(samples):
         ctx = {
             "env_summary": s["env_summary"],
             "trajectory_summary": s["trajectory_summary"],
@@ -409,6 +410,24 @@ def eval_set(samples: list[dict[str, Any]], mode: str, recognizer: ScenarioTaskR
             )
             second_pass_used += int(bool(r.get("second_pass_used", False)))
         y_pred.append(str(r["task_mode"]))
+        features = r.get("features", {}) if isinstance(r.get("features"), dict) else {}
+        sample_predictions.append(
+            {
+                "sample_index": int(sample_idx),
+                "true_label": str(s["label"]),
+                "pred": str(r.get("task_mode", "")),
+                "llm_confidence": float(r.get("confidence", 0.0)) if mode in {"llm", "hybrid"} else None,
+                "rule_top_task": str(r.get("rule_top1", r.get("task_mode", ""))) if mode in {"rule", "hybrid"} else None,
+                "llm_score_margin": float(r.get("score_margin", 0.0)) if mode in {"llm", "hybrid"} else None,
+                "top2_candidate_tasks": r.get("top2_candidate_tasks", features.get("top2_candidate_tasks", [])),
+                "critical_gap_score": features.get("critical_gap_score"),
+                "capability_bottleneck_score": features.get("capability_bottleneck_score"),
+                "global_finishing_score": features.get("global_finishing_score"),
+                "semantic_cue": str(s.get("semantic_cue", "")),
+                "definition_profile": str(s.get("definition_profile", "default")),
+                "used_second_pass": bool(r.get("second_pass_used", False)),
+            }
+        )
 
     confusion = _confusion(y_true, y_pred)
     rest_to_critical = sum(1 for t, p in zip(y_true, y_pred) if t == "restoration_capability_priority" and p == "critical_load_priority")
@@ -431,6 +450,9 @@ def eval_set(samples: list[dict[str, Any]], mode: str, recognizer: ScenarioTaskR
         "second_pass_used": second_pass_used,
         "hybrid_used_llm_count": hybrid_used_llm,
         "hybrid_used_llm_ratio": (hybrid_used_llm / float(len(y_true))) if y_true else 0.0,
+        "y_true": y_true,
+        "y_pred": y_pred,
+        "sample_predictions": sample_predictions,
     }
 
 
@@ -480,20 +502,72 @@ def main() -> None:
         target_sets = sets.keys() if args.eval_set == "all" else [args.eval_set]
         client = LLMClient(mode=args.llm_mode)
         client.preflight_check()
-        result = {
-            s: {
-                "rule": eval_set(sets[s], "rule", recognizer),
-                "llm": eval_set(sets[s], "llm", recognizer, client),
-                "hybrid": eval_set(sets[s], "hybrid", recognizer, client),
+        result = {}
+        recognizer_sample_predictions: list[dict[str, Any]] = []
+        recognizer_confusion_matrices: dict[str, dict[str, Any]] = {}
+        recognizer_plot_bundle: dict[str, Any] = {"splits": {}}
+        for split_name in target_sets:
+            split_samples = sets[split_name]
+            rule_res = eval_set(split_samples, "rule", recognizer)
+            llm_res = eval_set(split_samples, "llm", recognizer, client)
+            hybrid_res = eval_set(split_samples, "hybrid", recognizer, client)
+            result[split_name] = {"rule": rule_res, "llm": llm_res, "hybrid": hybrid_res}
+            recognizer_confusion_matrices[split_name] = {
+                "rule": rule_res.get("confusion_matrix", {}),
+                "llm": llm_res.get("confusion_matrix", {}),
+                "hybrid": hybrid_res.get("confusion_matrix", {}),
             }
-            for s in target_sets
-        }
+            recognizer_plot_bundle["splits"][split_name] = {
+                "rule": {"accuracy": float(rule_res.get("accuracy", 0.0)), "macro_f1": float(rule_res.get("macro_f1", 0.0))},
+                "llm": {"accuracy": float(llm_res.get("accuracy", 0.0)), "macro_f1": float(llm_res.get("macro_f1", 0.0))},
+                "hybrid": {"accuracy": float(hybrid_res.get("accuracy", 0.0)), "macro_f1": float(hybrid_res.get("macro_f1", 0.0))},
+                "hybrid_used_llm_count": int(hybrid_res.get("hybrid_used_llm_count", 0)),
+                "hybrid_used_llm_ratio": float(hybrid_res.get("hybrid_used_llm_ratio", 0.0)),
+            }
+            n = len(split_samples)
+            for idx in range(n):
+                rule_pred = rule_res.get("sample_predictions", [])[idx] if idx < len(rule_res.get("sample_predictions", [])) else {}
+                llm_pred = llm_res.get("sample_predictions", [])[idx] if idx < len(llm_res.get("sample_predictions", [])) else {}
+                hybrid_pred = hybrid_res.get("sample_predictions", [])[idx] if idx < len(hybrid_res.get("sample_predictions", [])) else {}
+                recognizer_sample_predictions.append(
+                    {
+                        "split": split_name,
+                        "sample_index": int(idx),
+                        "true_label": str(split_samples[idx].get("label", "")),
+                        "rule_pred": rule_pred.get("pred"),
+                        "llm_pred": llm_pred.get("pred"),
+                        "hybrid_pred": hybrid_pred.get("pred"),
+                        "llm_confidence": llm_pred.get("llm_confidence"),
+                        "rule_top_task": rule_pred.get("rule_top_task"),
+                        "llm_score_margin": llm_pred.get("llm_score_margin"),
+                        "top2_candidate_tasks": llm_pred.get("top2_candidate_tasks"),
+                        "critical_gap_score": llm_pred.get("critical_gap_score"),
+                        "capability_bottleneck_score": llm_pred.get("capability_bottleneck_score"),
+                        "global_finishing_score": llm_pred.get("global_finishing_score"),
+                        "semantic_cue": llm_pred.get("semantic_cue"),
+                        "definition_profile": llm_pred.get("definition_profile"),
+                        "used_second_pass": llm_pred.get("used_second_pass"),
+                    }
+                )
         print(json.dumps(result, indent=2, ensure_ascii=False))
 
     if args.output_json:
         out = Path(args.output_json)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+        if args.mode == "eval":
+            (out.parent / "recognizer_sample_predictions.json").write_text(
+                json.dumps(recognizer_sample_predictions, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            (out.parent / "recognizer_confusion_matrices.json").write_text(
+                json.dumps(recognizer_confusion_matrices, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            (out.parent / "recognizer_plot_bundle.json").write_text(
+                json.dumps(recognizer_plot_bundle, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
 
 
 if __name__ == "__main__":
