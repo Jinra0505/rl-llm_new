@@ -172,8 +172,40 @@ def normalize_spec(raw: dict[str, Any] | None, style: str = "balanced", task_mod
     return d
 
 
+def normalize_phase_contract(raw: dict[str, Any] | None) -> dict[str, Any]:
+    raw = raw if isinstance(raw, dict) else {}
+    allowed_modes = {"critical_push", "capability_unblock", "balanced_progress", "late_finish", "resource_preserve"}
+    phase_mode = str(raw.get("phase_mode", "balanced_progress")).strip().lower() or "balanced_progress"
+    if phase_mode not in allowed_modes:
+        phase_mode = "balanced_progress"
+    try:
+        phase_duration = int(raw.get("phase_duration", 8))
+    except (TypeError, ValueError):
+        phase_duration = 8
+    phase_duration = max(2, min(80, phase_duration))
+    try:
+        resource_floor_target = float(raw.get("resource_floor_target", 0.12))
+    except (TypeError, ValueError):
+        resource_floor_target = 0.12
+    resource_floor_target = max(0.05, min(0.40, resource_floor_target))
+    completion_push_allowed = bool(raw.get("completion_push_allowed", True))
+    try:
+        late_stage_trigger = float(raw.get("late_stage_trigger", 0.72))
+    except (TypeError, ValueError):
+        late_stage_trigger = 0.72
+    late_stage_trigger = max(0.50, min(0.95, late_stage_trigger))
+    return {
+        "phase_mode": phase_mode,
+        "phase_duration": phase_duration,
+        "resource_floor_target": resource_floor_target,
+        "completion_push_allowed": completion_push_allowed,
+        "late_stage_trigger": late_stage_trigger,
+    }
+
+
 def build_module_payload(spec: dict[str, Any], file_name: str, rationale: str = "", expected_behavior: str = "") -> dict[str, Any]:
     s = normalize_spec(spec, str(spec.get("style", "balanced")), str(spec.get("task_mode", "global_efficiency_priority")))
+    phase_contract = normalize_phase_contract(spec.get("phase_contract", spec))
     reward_controls = dict(s.get("reward_controls", {}))
     code = f'''import numpy as np
 
@@ -225,4 +257,5 @@ def intrinsic_reward(state, action, next_state, info=None, revised_state=None):
         "code": code,
         "expected_behavior": expected_behavior,
         "structured_spec": s,
+        "phase_contract": phase_contract,
     }

@@ -126,6 +126,7 @@ BENCHMARK_SPLITS: dict[str, list[str]] = {
     ],
     "benchmark_eval_presets": [
         "critical_load_dominant",
+        "capability_bottleneck_dominant",
         "global_finishing_dominant",
     ],
     "benchmark_uncertain_presets": [
@@ -559,8 +560,40 @@ class ProjectRecoveryEnv(gym.Env):
     def _build_info(self, progress_delta: float, invalid_action: bool, invalid_reason: str, mes_used: bool) -> dict[str, Any]:
         s = self.state
         stage_val, stage_name = self._stage(s)
+        power_mean = float(np.mean(s[0:3]))
+        comm_mean = float(np.mean(s[3:6]))
+        road_mean = float(np.mean(s[6:9]))
+        critical_mean = float(np.mean(s[9:12]))
+        layer_recovery_floor = float(min(power_mean, comm_mean, road_mean, critical_mean))
+        mean_backbone = float(np.mean(s[12:15]))
+        resource_headroom = float(np.mean([s[19], s[20], s[21]]))
+        remaining_recovery_gap = float(max(0.0, 1.0 - layer_recovery_floor))
+        completion_feasibility = float(np.clip(0.45 * mean_backbone + 0.35 * resource_headroom + 0.20 * (1.0 - remaining_recovery_gap), 0.0, 1.0))
+        resource_floor_target = 0.14 if stage_name != "late" else 0.10
+        resource_floor_risk = float(np.clip((resource_floor_target - min(float(s[19]), float(s[20]), float(s[21]))) / max(resource_floor_target, 1e-6), 0.0, 1.0))
+        backlog_proxy_power = float(max(0.0, 1.0 - power_mean))
+        backlog_proxy_comm = float(max(0.0, 1.0 - comm_mean))
+        backlog_proxy_road = float(max(0.0, 1.0 - road_mean))
+        backlog_proxy_critical = float(max(0.0, 1.0 - critical_mean))
+        safe_completion_window = bool(
+            stage_name == "late"
+            and completion_feasibility >= 0.52
+            and resource_floor_risk <= 0.55
+            and remaining_recovery_gap <= 0.35
+        )
+        late_stage_entry_flag = bool(stage_name == "late" or float(s[22]) >= 0.95)
         weakest_zone = int(np.argmin((s[0:3] + s[3:6] + s[6:9]) / 3.0))
         zone_map = {0: "A", 1: "B", 2: "C"}
+        if critical_mean < 0.62 and float(np.mean(s[0:3])) >= 0.45:
+            phase_recommendation = "critical_push"
+        elif (comm_mean < 0.48 or road_mean < 0.48) and resource_floor_risk < 0.80:
+            phase_recommendation = "capability_unblock"
+        elif safe_completion_window:
+            phase_recommendation = "late_finish"
+        elif resource_floor_risk >= 0.78:
+            phase_recommendation = "resource_preserve"
+        else:
+            phase_recommendation = "balanced_progress"
 
         return {
             "progress_delta": float(progress_delta),
@@ -599,6 +632,16 @@ class ProjectRecoveryEnv(gym.Env):
             "weakest_zone": zone_map[weakest_zone],
             "weakest_layer": str(np.argmin([np.mean(s[0:3]), np.mean(s[3:6]), np.mean(s[6:9])])),
             "critical_load_shortfall": float(1.0 - np.mean(s[9:12])),
+            "remaining_recovery_gap": remaining_recovery_gap,
+            "completion_feasibility": completion_feasibility,
+            "resource_floor_risk": resource_floor_risk,
+            "backlog_proxy_power": backlog_proxy_power,
+            "backlog_proxy_comm": backlog_proxy_comm,
+            "backlog_proxy_road": backlog_proxy_road,
+            "backlog_proxy_critical": backlog_proxy_critical,
+            "phase_recommendation": phase_recommendation,
+            "late_stage_entry_flag": late_stage_entry_flag,
+            "safe_completion_window": safe_completion_window,
             "preset_name": self.last_preset_name,
             "preset_group": self.last_preset_group,
             "benchmark_mode": self.last_benchmark_mode,

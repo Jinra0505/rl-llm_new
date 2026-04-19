@@ -11,6 +11,13 @@ outer_loop:
   candidates_per_round: 1
 scenario:
   severity: moderate
+evaluation:
+  fixed_budget:
+    enabled: true
+    max_steps: 12
+  completion_budget:
+    enabled: true
+    max_steps: 22
 env:
   name: project_recovery
   max_steps: 25

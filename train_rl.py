@@ -194,6 +194,107 @@ def _valid_action_mask(action_dim: int, info: dict[str, Any]) -> np.ndarray:
     return mask
 
 
+def _normalize_phase_contract(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raw = {}
+    allowed_modes = {
+        "critical_push",
+        "capability_unblock",
+        "balanced_progress",
+        "late_finish",
+        "resource_preserve",
+    }
+    phase_mode = str(raw.get("phase_mode", "balanced_progress")).strip().lower()
+    if phase_mode not in allowed_modes:
+        phase_mode = "balanced_progress"
+    phase_duration = int(raw.get("phase_duration", 8) or 8)
+    phase_duration = min(80, max(2, phase_duration))
+    resource_floor_target = float(raw.get("resource_floor_target", 0.12) or 0.12)
+    resource_floor_target = float(np.clip(resource_floor_target, 0.05, 0.40))
+    completion_push_allowed = bool(raw.get("completion_push_allowed", True))
+    late_stage_trigger = float(raw.get("late_stage_trigger", 0.72) or 0.72)
+    late_stage_trigger = float(np.clip(late_stage_trigger, 0.50, 0.95))
+    return {
+        "phase_mode": phase_mode,
+        "phase_duration": phase_duration,
+        "resource_floor_target": resource_floor_target,
+        "completion_push_allowed": completion_push_allowed,
+        "late_stage_trigger": late_stage_trigger,
+    }
+
+
+def _phase_adjusted_mask(mask: np.ndarray, info: dict[str, Any], phase_contract: dict[str, Any], step_idx: int) -> np.ndarray:
+    out = mask.copy()
+    phase_mode = str(phase_contract.get("phase_mode", "balanced_progress"))
+    duration = int(phase_contract.get("phase_duration", 8))
+    late_trigger = float(phase_contract.get("late_stage_trigger", 0.72))
+    stage_indicator = float(info.get("stage_indicator", 0.0))
+    resource_floor_target = float(phase_contract.get("resource_floor_target", 0.12))
+    material = float(info.get("material_stock", 1.0))
+    completion_push_allowed = bool(phase_contract.get("completion_push_allowed", True))
+
+    in_late_window = stage_indicator >= late_trigger
+    in_phase_window = step_idx < duration
+    if phase_mode == "resource_preserve":
+        if material <= resource_floor_target:
+            out[0:9] = False
+            out[13] = False
+            out[14] = True
+        else:
+            # Prevent collapse into endless wait when resources are already healthy.
+            out[14] = False
+    elif phase_mode == "critical_push" and in_phase_window:
+        if float(info.get("critical_load_shortfall", 0.0)) > 0.08:
+            out[0:3] = False
+    elif phase_mode == "capability_unblock" and in_phase_window:
+        out[13] = False
+        if float(info.get("backbone_comm_ratio", 1.0)) < 0.32:
+            out[12] = False
+    elif phase_mode == "late_finish" and (in_late_window or in_phase_window):
+        out[0:3] = False
+        if not completion_push_allowed:
+            out[9:12] = False
+    return out
+
+
+def _phase_q_bias(action_dim: int, info: dict[str, Any], phase_contract: dict[str, Any], step_idx: int) -> np.ndarray:
+    phase_mode = str(phase_contract.get("phase_mode", "balanced_progress"))
+    duration = int(phase_contract.get("phase_duration", 8))
+    late_trigger = float(phase_contract.get("late_stage_trigger", 0.72))
+    stage_indicator = float(info.get("stage_indicator", 0.0))
+    weak_layer = str(info.get("weakest_layer", "0"))
+    weak_zone = str(info.get("weakest_zone", "A"))
+    zone_idx = {"A": 0, "B": 1, "C": 2}.get(weak_zone, 0)
+    bias = np.zeros(action_dim, dtype=np.float32)
+    if phase_mode == "critical_push" and step_idx < duration:
+        bias[3 + zone_idx] += 0.20
+        bias[9 + zone_idx] += 0.18
+    elif phase_mode == "capability_unblock" and step_idx < duration:
+        bias[zone_idx] += 0.18
+        bias[6 + zone_idx] += 0.18
+        bias[12] += 0.08
+    elif phase_mode == "resource_preserve":
+        if float(info.get("material_stock", 1.0)) < float(phase_contract.get("resource_floor_target", 0.12)):
+            bias[14] += 0.15
+        else:
+            bias[14] -= 0.10
+            bias[6 + zone_idx] += 0.08
+            bias[3 + zone_idx] += 0.08
+    elif phase_mode == "late_finish" and (stage_indicator >= late_trigger or step_idx < duration):
+        if weak_layer == "0":
+            bias[3 + zone_idx] += 0.22
+        elif weak_layer == "1":
+            bias[6 + zone_idx] += 0.22
+        else:
+            bias[zone_idx] += 0.20
+        bias[13] -= 0.12
+        bias[14] -= 0.10
+    else:
+        bias[3 + zone_idx] += 0.05
+        bias[6 + zone_idx] += 0.05
+    return bias
+
+
 def _selection_score(metrics: dict[str, Any], weights_cfg: dict[str, Any]) -> float:
     weights = dict(weights_cfg.get("__global__", {}))
     if not weights:
@@ -249,25 +350,6 @@ def _top_lipschitz_dims(vec: np.ndarray, top_k: int = 3, reverse: bool = True) -
     return out
 
 
-def _ema(values: list[float], window: int) -> list[float]:
-    if window <= 1:
-        return [float(v) for v in values]
-    alpha = 2.0 / float(window + 1)
-    out: list[float] = []
-    ema_v = 0.0
-    for idx, v in enumerate(values):
-        x = float(v)
-        ema_v = x if idx == 0 else (alpha * x + (1.0 - alpha) * ema_v)
-        out.append(float(ema_v))
-    return out
-
-
-def _stage_bucket(stage: str) -> str:
-    if stage in {"early", "middle", "late"}:
-        return stage
-    return "middle"
-
-
 def run_training(
     revise_module_path: Path | None,
     env_name: str,
@@ -287,6 +369,7 @@ def run_training(
     intrinsic_scale: float = 1.0,
     env_reset_options: dict[str, Any] | None | callable = None,
     reward_mode: str | None = None,
+    phase_contract: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if str(llm_mode).lower() != "real":
         raise RuntimeError(f"Formal run requires llm_mode=real, got: {llm_mode}")
@@ -305,6 +388,7 @@ def run_training(
         reward_controls = _normalize_reward_controls({})
 
     env = ProjectRecoveryEnv(max_steps=max_steps_per_episode, seed=seed, severity=severity)
+    normalized_phase_contract = _normalize_phase_contract(phase_contract)
     action_dim = int(env.action_space.n)
 
     dqn_cfg = dqn_cfg or {}
@@ -363,11 +447,8 @@ def run_training(
     lipschitz_smooth_beta = 0.20
     smoothed_lipschitz_vector = np.zeros(state_dim, dtype=np.float32)
     last_episode_lipschitz_vector = np.zeros(state_dim, dtype=np.float32)
-    training_episode_lengths: list[int] = []
-    training_episode_success_flags: list[bool] = []
-    training_steps_cumulative: list[int] = []
-    reward_components_curve: list[dict[str, float]] = []
-    training_lipschitz_curve: list[dict[str, Any]] = []
+    phase_action_match_train = 0
+    phase_action_match_eval = 0
 
     for ep in range(train_episodes):
         train_opts = _resolve_reset_options("train", ep)
@@ -401,8 +482,6 @@ def run_training(
             }
         )
         ep_reward = 0.0
-        ep_steps = 0
-        ep_terminated = False
         ep_violation_count = 0
         mid_stagnation_steps = 0
         mid_wait_streak = 0
@@ -417,6 +496,7 @@ def run_training(
         for step in range(max_steps_per_episode):
             rs = _effective_state(_call_revise(revise_state_fn, s, info), max_revised_dim)
             valid_mask = _valid_action_mask(action_dim, info)
+            valid_mask = _phase_adjusted_mask(valid_mask, info, normalized_phase_contract, step)
             valid_actions = np.where(valid_mask)[0]
             if valid_actions.size == 0:
                 if action_dim > 14:
@@ -432,8 +512,10 @@ def run_training(
                 with torch.no_grad():
                     qvals = q_net(torch.tensor(rs, dtype=torch.float32).unsqueeze(0))
                     qarr = qvals.squeeze(0).cpu().numpy()
+                    qarr += _phase_q_bias(action_dim, info, normalized_phase_contract, step)
                     qarr[~valid_mask] = -1e9
                     a = int(np.argmax(qarr))
+            phase_action_match_train += int(a == int(np.argmax(_phase_q_bias(action_dim, info, normalized_phase_contract, step))))
 
             action_usage[str(a)] += 1
             ns, ext_r, terminated, truncated, info = env.step(a)
@@ -488,6 +570,38 @@ def run_training(
             middle_stagnation_penalty = 0.18 if mid_stagnation_steps >= 6 else 0.0
             severe_mid_stagnation_penalty = 0.28 if mid_stagnation_steps >= 12 else 0.0
             sustainable_progress_bonus = 0.10 if (progress_bonus > 0.010 and material_now > 0.12) else 0.0
+            phase_mode = str(normalized_phase_contract.get("phase_mode", "balanced_progress"))
+            phase_resource_floor_target = float(normalized_phase_contract.get("resource_floor_target", 0.12))
+            phase_late_trigger = float(normalized_phase_contract.get("late_stage_trigger", 0.72))
+            phase_completion_push_allowed = bool(normalized_phase_contract.get("completion_push_allowed", True))
+            phase_bonus = 0.0
+            phase_penalty = 0.0
+            if phase_mode == "critical_push":
+                if a in {3, 4, 5, 9, 10, 11} and critical_gain > 0.0:
+                    phase_bonus += 0.10
+                if a == 14 and critical_gain <= 0.0:
+                    phase_penalty += 0.12
+            elif phase_mode == "capability_unblock":
+                if a in {0, 1, 2, 6, 7, 8} and progress_bonus > 0.0:
+                    phase_bonus += 0.10
+                if a == 13:
+                    phase_penalty += 0.06
+            elif phase_mode == "resource_preserve":
+                if material_now < phase_resource_floor_target:
+                    if a == 14:
+                        phase_bonus += 0.06
+                    else:
+                        phase_penalty += 0.08
+                elif a == 14 and progress_bonus < 0.001:
+                    phase_penalty += 0.14
+            elif phase_mode == "late_finish":
+                if float(info.get("stage_indicator", 0.0)) >= phase_late_trigger:
+                    if a in {3, 4, 5, 6, 7, 8}:
+                        phase_bonus += 0.12
+                    if a == 14:
+                        phase_penalty += 0.10
+                    if not phase_completion_push_allowed and a in {9, 10, 11}:
+                        phase_penalty += 0.08
             if intrinsic_mode in {"off", "state_only"}:
                 effective_ir = 0.0
             else:
@@ -505,6 +619,7 @@ def run_training(
                 + low_violation_finish_bonus * reward_controls["recovery_floor_bonus_scale"]
                 + material_buffer_bonus
                 + sustainable_progress_bonus
+                + phase_bonus
             )
             engineered_penalty = float(
                 invalid_penalty * reward_controls["invalid_penalty_scale"]
@@ -517,6 +632,7 @@ def run_training(
                 + severe_mid_stagnation_penalty
                 + wait_misuse_penalty * reward_controls["wait_penalty_scale"]
                 + repeated_wait_penalty * reward_controls["wait_penalty_scale"]
+                + phase_penalty
             )
             engineered_component = engineered_bonus - engineered_penalty
             if reward_mode_resolved == "clean":
@@ -564,7 +680,6 @@ def run_training(
 
             ep_reward += r
             s = ns
-            ep_steps += 1
             global_step += 1
             train_total_steps += 1
 
@@ -573,26 +688,11 @@ def run_training(
                 ep_violation_count += 1
             if done:
                 if terminated:
-                    ep_terminated = True
                     successes += 1
                     completion_steps.append(step + 1)
                 break
 
         episode_rewards.append(ep_reward)
-        training_episode_lengths.append(int(ep_steps))
-        training_episode_success_flags.append(bool(ep_terminated))
-        training_steps_cumulative.append(int(train_total_steps))
-        reward_components_curve.append(
-            {
-                "episode_index": int(ep),
-                "ext_reward_total": float(ep_ext_component_total),
-                "intrinsic_reward_total": float(ep_intrinsic_component_total),
-                "engineered_reward_total": float(ep_engineered_component_total),
-                "engineered_bonus_total": float(ep_engineered_bonus_total),
-                "engineered_penalty_total": float(ep_engineered_penalty_total),
-                "total_reward": float(ep_reward),
-            }
-        )
         ep_lips_vec, low_sample, pair_count = _estimate_episode_lipschitz_vector(
             episode_states=episode_effective_states,
             episode_rewards=episode_composite_rewards,
@@ -603,14 +703,6 @@ def run_training(
         smoothed_lipschitz_vector = (1.0 - lipschitz_smooth_beta) * smoothed_lipschitz_vector + lipschitz_smooth_beta * ep_lips_vec
         last_episode_lipschitz_vector = ep_lips_vec
         episode_lipschitz_vectors.append([float(x) for x in ep_lips_vec.tolist()])
-        training_lipschitz_curve.append(
-            {
-                "episode_index": int(ep),
-                "episode_lipschitz_mean": float(np.mean(ep_lips_vec)) if ep_lips_vec.size else 0.0,
-                "episode_lipschitz_pair_count": int(pair_count),
-                "low_sample_flag": bool(low_sample),
-            }
-        )
         train_component_ext_total = locals().get("train_component_ext_total", 0.0) + ep_ext_component_total
         train_component_intrinsic_total = locals().get("train_component_intrinsic_total", 0.0) + ep_intrinsic_component_total
         train_component_engineered_total = locals().get("train_component_engineered_total", 0.0) + ep_engineered_component_total
@@ -661,12 +753,6 @@ def run_training(
     late_stage_coordinated_steps = 0
     representative_eval_trace: list[dict[str, Any]] = []
     representative_eval_summary: dict[str, Any] = {}
-    stage_categories = ["road", "power", "comm", "mes", "feeder", "coordinated", "wait"]
-    stage_action_counts_eval: dict[str, Counter[str]] = {
-        "early": Counter({k: 0 for k in stage_categories}),
-        "middle": Counter({k: 0 for k in stage_categories}),
-        "late": Counter({k: 0 for k in stage_categories}),
-    }
 
     for ep in range(eval_episodes):
         eval_opts = _resolve_reset_options("eval", ep)
@@ -712,6 +798,7 @@ def run_training(
         for step_idx in range(max_steps_per_episode):
             rs = _effective_state(_call_revise(revise_state_fn, s, info), max_revised_dim)
             valid_mask = _valid_action_mask(action_dim, info)
+            valid_mask = _phase_adjusted_mask(valid_mask, info, normalized_phase_contract, step_idx)
             valid_actions = np.where(valid_mask)[0]
             if valid_actions.size == 0:
                 if action_dim > 14:
@@ -721,8 +808,10 @@ def run_training(
             with torch.no_grad():
                 qvals = q_net(torch.tensor(rs, dtype=torch.float32).unsqueeze(0))
                 qarr = qvals.squeeze(0).cpu().numpy()
+                qarr += _phase_q_bias(action_dim, info, normalized_phase_contract, step_idx)
                 qarr[~valid_mask] = -1e9
                 a = int(np.argmax(qarr))
+            phase_action_match_eval += int(a == int(np.argmax(_phase_q_bias(action_dim, info, normalized_phase_contract, step_idx))))
             eval_action_usage[str(a)] += 1
             if a == 14:
                 eval_total_wait_count += 1
@@ -738,9 +827,6 @@ def run_training(
             eval_stage_counts[str(info.get("stage", "unknown"))] += 1
             eval_weakest_zone_counts[str(info.get("weakest_zone", "A"))] += 1
             eval_weakest_layer_counts[str(info.get("weakest_layer", "0"))] += 1
-            stage_key = _stage_bucket(str(info.get("stage", "middle")))
-            action_cat = _action_category(a)
-            stage_action_counts_eval[stage_key][action_cat] += 1
             if str(info.get("stage", "middle")) == "late":
                 late_stage_steps_total += 1
                 if a in {3, 4, 5, 6, 7, 8}:
@@ -749,27 +835,16 @@ def run_training(
                     late_stage_coordinated_steps += 1
             if a in {9, 10, 11}:
                 ep_mes_moves += 1
-            if ep == 0:
+            if ep == 0 and step_idx < 12:
                 episode_trace.append(
                     {
-                        "step": int(step_idx),
-                        "action": int(a),
-                        "action_category": action_cat,
+                        "step": step_idx,
+                        "action": a,
                         "progress_delta": float(info.get("progress_delta", 0.0)),
                         "stage": str(info.get("stage", "unknown")),
                         "invalid_action": bool(info.get("invalid_action", False)),
+                        "invalid_reason": str(info.get("invalid_reason", "")),
                         "constraint_violation": bool(info.get("constraint_violation", False)),
-                        "communication_recovery_ratio": float(info.get("communication_recovery_ratio", 0.0)),
-                        "power_recovery_ratio": float(info.get("power_recovery_ratio", 0.0)),
-                        "road_recovery_ratio": float(info.get("road_recovery_ratio", 0.0)),
-                        "critical_load_recovery_ratio": float(info.get("critical_load_recovery_ratio", 0.0)),
-                        "backbone_comm_ratio": float(info.get("backbone_comm_ratio", info.get("communication_recovery_ratio", 0.0))),
-                        "backbone_power_ratio": float(info.get("backbone_power_ratio", info.get("power_recovery_ratio", 0.0))),
-                        "backbone_road_ratio": float(info.get("backbone_road_ratio", info.get("road_recovery_ratio", 0.0))),
-                        "material_stock": float(info.get("material_stock", 0.0)),
-                        "mes_soc": float(info.get("mes_soc", 0.0)),
-                        "weakest_zone": str(info.get("weakest_zone", "A")),
-                        "weakest_layer": str(info.get("weakest_layer", "0")),
                     }
                 )
             s = ns
@@ -851,38 +926,6 @@ def run_training(
     lipschitz_mean = float(np.mean(lips_final_vec)) if lips_final_vec.size else 0.0
     lipschitz_max = float(np.max(lips_final_vec)) if lips_final_vec.size else 0.0
     lipschitz_min = float(np.min(lips_final_vec)) if lips_final_vec.size else 0.0
-    episode_reward_ema_5 = _ema(episode_rewards, 5)
-    episode_reward_ema_10 = _ema(episode_rewards, 10)
-    training_curve = [
-        {
-            "episode_index": int(ep_idx),
-            "episode_reward": float(episode_rewards[ep_idx]),
-            "episode_reward_ema_5": float(episode_reward_ema_5[ep_idx]),
-            "episode_reward_ema_10": float(episode_reward_ema_10[ep_idx]),
-            "train_total_steps_cumulative": int(training_steps_cumulative[ep_idx]) if ep_idx < len(training_steps_cumulative) else 0,
-            "episode_length": int(training_episode_lengths[ep_idx]) if ep_idx < len(training_episode_lengths) else 0,
-            "episode_success_flag": bool(training_episode_success_flags[ep_idx]) if ep_idx < len(training_episode_success_flags) else False,
-        }
-        for ep_idx in range(len(episode_rewards))
-    ]
-    stage_action_summary_eval: dict[str, dict[str, Any]] = {}
-    for stage_name in ("early", "middle", "late"):
-        counts = {k: int(stage_action_counts_eval[stage_name].get(k, 0)) for k in stage_categories}
-        total_stage_actions = int(sum(counts.values()))
-        ratios = {k: float(v) / float(max(1, total_stage_actions)) for k, v in counts.items()}
-        stage_action_summary_eval[stage_name] = {
-            "counts": counts,
-            "ratios": ratios,
-            "total_actions": total_stage_actions,
-        }
-    representative_eval_trace_meta = {
-        "episode_index": 0,
-        "terminated": bool(representative_eval_summary.get("terminated", False)),
-        "truncated": bool(representative_eval_summary.get("truncated", False)),
-        "total_steps": int(representative_eval_summary.get("steps", len(representative_eval_trace))),
-        "final_selection_score_proxy_if_available": float(eval_success_rate),
-        "note": "Representative trace from first evaluation episode.",
-    }
     benchmark_modes_used = sorted({str(x.get("benchmark_mode", "off")) for x in benchmark_meta_obs if x.get("benchmark_mode", "")})
     preset_names_used = sorted({str(x.get("preset_name", "")) for x in benchmark_meta_obs if x.get("preset_name", "")})
     preset_groups_used = sorted({str(x.get("preset_group", "")) for x in benchmark_meta_obs if x.get("preset_group", "")})
@@ -947,6 +990,10 @@ def run_training(
         "zone_B_critical_load_ratio": float(np.mean(eval_zone_B_load)) if eval_zone_B_load else 0.0,
         "zone_C_critical_load_ratio": float(np.mean(eval_zone_C_load)) if eval_zone_C_load else 0.0,
         "task_mode_used": task_mode,
+        "phase_contract_used": dict(normalized_phase_contract),
+        "phase_mode_used": str(normalized_phase_contract.get("phase_mode", "balanced_progress")),
+        "phase_action_match_rate_train": float(phase_action_match_train) / float(max(1, train_total_steps)),
+        "phase_action_match_rate_eval": float(phase_action_match_eval) / float(max(1, eval_total_steps)),
         "llm_mode_used": "real",
         "reward_mode": reward_mode_resolved,
         "reward_controls": dict(reward_controls),
@@ -979,12 +1026,7 @@ def run_training(
         },
         "invalid_reason_counts_eval": dict(eval_invalid_reason_counts),
         "representative_eval_trace": representative_eval_trace,
-        "representative_eval_trace_meta": representative_eval_trace_meta,
         "representative_eval_summary": representative_eval_summary,
-        "stage_action_summary_eval": stage_action_summary_eval,
-        "training_curve": training_curve,
-        "reward_components_curve": reward_components_curve,
-        "training_lipschitz_curve": training_lipschitz_curve,
         "eval_trajectory_summary": {
             "mean_steps": float(np.mean(eval_steps_per_episode)) if eval_steps_per_episode else 0.0,
             "terminated_rate": eval_terminated_count / float(max(1, eval_episodes)),
