@@ -167,6 +167,11 @@ def _normalize_planning_obj(parsed: dict[str, Any]) -> tuple[dict[str, Any], lis
         "should_avoid",
         "finishing_strategy",
         "codegen_guidance",
+        "phase_mode",
+        "phase_duration",
+        "resource_floor_target",
+        "completion_push_allowed",
+        "late_stage_trigger",
     ]
     notes: list[str] = []
     normalized: dict[str, Any] = {}
@@ -176,6 +181,14 @@ def _normalize_planning_obj(parsed: dict[str, Any]) -> tuple[dict[str, Any], lis
             notes.append(f"missing_key:{key}")
             if key in {"should_reward", "should_penalize", "should_avoid"}:
                 normalized[key] = []
+            elif key == "phase_duration":
+                normalized[key] = 8
+            elif key == "resource_floor_target":
+                normalized[key] = 0.12
+            elif key == "late_stage_trigger":
+                normalized[key] = 0.72
+            elif key == "completion_push_allowed":
+                normalized[key] = True
             else:
                 normalized[key] = ""
             changed = True
@@ -204,6 +217,29 @@ def _normalize_planning_obj(parsed: dict[str, Any]) -> tuple[dict[str, Any], lis
                 notes.append("type_should_avoid:expected_list")
                 normalized[key] = []
                 changed = True
+        elif key in {"phase_duration"}:
+            try:
+                normalized[key] = int(np.clip(int(val), 2, 80))
+            except (TypeError, ValueError):
+                normalized[key] = 8
+                notes.append("type_phase_duration:coerced")
+                changed = True
+        elif key in {"resource_floor_target", "late_stage_trigger"}:
+            defaults = {"resource_floor_target": 0.12, "late_stage_trigger": 0.72}
+            bounds = {"resource_floor_target": (0.05, 0.40), "late_stage_trigger": (0.50, 0.95)}
+            lo, hi = bounds[key]
+            try:
+                normalized[key] = float(np.clip(float(val), lo, hi))
+            except (TypeError, ValueError):
+                normalized[key] = defaults[key]
+                notes.append(f"type_{key}:coerced")
+                changed = True
+        elif key == "completion_push_allowed":
+            if isinstance(val, bool):
+                normalized[key] = val
+            else:
+                normalized[key] = str(val).strip().lower() in {"1", "true", "yes", "on"}
+                changed = True
         else:
             short = _safe_short_text(val)
             if len(short) == 0:
@@ -211,18 +247,45 @@ def _normalize_planning_obj(parsed: dict[str, Any]) -> tuple[dict[str, Any], lis
             if short != str(val):
                 changed = True
             normalized[key] = short
+    allowed_modes = {"critical_push", "capability_unblock", "balanced_progress", "late_finish", "resource_preserve"}
+    if str(normalized.get("phase_mode", "")).strip().lower() not in allowed_modes:
+        normalized["phase_mode"] = "balanced_progress"
+        notes.append("phase_mode:defaulted")
+        changed = True
     return normalized, notes, changed
 
 
 def _normalize_compact_planning_obj(parsed: dict[str, Any]) -> tuple[dict[str, Any], list[str], bool]:
-    required = ["weakest_layer", "weakest_zone", "should_reward", "should_avoid", "codegen_guidance"]
+    required = [
+        "weakest_layer",
+        "weakest_zone",
+        "should_reward",
+        "should_avoid",
+        "codegen_guidance",
+        "phase_mode",
+        "phase_duration",
+        "resource_floor_target",
+        "completion_push_allowed",
+        "late_stage_trigger",
+    ]
     notes: list[str] = []
     normalized: dict[str, Any] = {}
     changed = False
     for key in required:
         if key not in parsed:
             notes.append(f"missing_key:{key}")
-            normalized[key] = [] if key in {"should_reward", "should_avoid"} else ""
+            if key in {"should_reward", "should_avoid"}:
+                normalized[key] = []
+            elif key == "phase_duration":
+                normalized[key] = 8
+            elif key == "resource_floor_target":
+                normalized[key] = 0.12
+            elif key == "late_stage_trigger":
+                normalized[key] = 0.72
+            elif key == "completion_push_allowed":
+                normalized[key] = True
+            else:
+                normalized[key] = ""
             changed = True
             continue
         val = parsed.get(key)
@@ -251,17 +314,54 @@ def _normalize_compact_planning_obj(parsed: dict[str, Any]) -> tuple[dict[str, A
                 normalized[key] = []
                 notes.append("type_should_avoid:expected_list")
                 changed = True
+        elif key == "phase_duration":
+            try:
+                normalized[key] = int(np.clip(int(val), 2, 80))
+            except (TypeError, ValueError):
+                normalized[key] = 8
+                notes.append("type_phase_duration:coerced")
+                changed = True
+        elif key in {"resource_floor_target", "late_stage_trigger"}:
+            defaults = {"resource_floor_target": 0.12, "late_stage_trigger": 0.72}
+            bounds = {"resource_floor_target": (0.05, 0.40), "late_stage_trigger": (0.50, 0.95)}
+            lo, hi = bounds[key]
+            try:
+                normalized[key] = float(np.clip(float(val), lo, hi))
+            except (TypeError, ValueError):
+                normalized[key] = defaults[key]
+                notes.append(f"type_{key}:coerced")
+                changed = True
+        elif key == "completion_push_allowed":
+            if isinstance(val, bool):
+                normalized[key] = val
+            else:
+                normalized[key] = str(val).strip().lower() in {"1", "true", "yes", "on"}
+                changed = True
         else:
             short = _safe_short_text(val, max_len=96)
             normalized[key] = short
             changed = changed or (short != str(val))
             if not short:
                 notes.append(f"empty_text:{key}")
+    allowed_modes = {"critical_push", "capability_unblock", "balanced_progress", "late_finish", "resource_preserve"}
+    if str(normalized.get("phase_mode", "")).strip().lower() not in allowed_modes:
+        normalized["phase_mode"] = "balanced_progress"
+        notes.append("phase_mode:defaulted")
+        changed = True
     return normalized, notes, changed
 
 
 def _normalize_feedback_obj(parsed: dict[str, Any]) -> tuple[dict[str, Any], list[str], bool]:
-    required = ["improvement_focus", "keep_signals", "avoid_patterns", "finish_strategy_adjustments", "confidence"]
+    required = [
+        "improvement_focus",
+        "keep_signals",
+        "avoid_patterns",
+        "finish_strategy_adjustments",
+        "phase_guidance",
+        "next_phase_mode",
+        "next_phase_duration",
+        "confidence",
+    ]
     notes: list[str] = []
     normalized: dict[str, Any] = {}
     changed = False
@@ -281,6 +381,17 @@ def _normalize_feedback_obj(parsed: dict[str, Any]) -> tuple[dict[str, Any], lis
                 changed = True
             conf = float(np.clip(conf, 0.0, 1.0))
             normalized[key] = conf
+        elif key == "next_phase_duration":
+            try:
+                normalized[key] = int(np.clip(int(val), 2, 80))
+            except (TypeError, ValueError):
+                normalized[key] = 8
+                notes.append("type_next_phase_duration:coerced")
+                changed = True
+        elif key in {"phase_guidance", "next_phase_mode"}:
+            short = _safe_short_text(val, max_len=40)
+            normalized[key] = short
+            changed = changed or (short != str(val))
         else:
             if isinstance(val, list):
                 out = [_safe_short_text(x, max_len=80) for x in val[:4]]
@@ -290,6 +401,14 @@ def _normalize_feedback_obj(parsed: dict[str, Any]) -> tuple[dict[str, Any], lis
                 normalized[key] = []
                 notes.append(f"type_{key}:expected_list")
                 changed = True
+    if normalized.get("phase_guidance", "") not in {"keep", "switch", "extend"}:
+        normalized["phase_guidance"] = "keep"
+        notes.append("phase_guidance:defaulted")
+        changed = True
+    if normalized.get("next_phase_mode", "") not in {"critical_push", "capability_unblock", "balanced_progress", "late_finish", "resource_preserve"}:
+        normalized["next_phase_mode"] = "balanced_progress"
+        notes.append("next_phase_mode:defaulted")
+        changed = True
     return normalized, notes, changed
 
 
@@ -808,7 +927,49 @@ def build_planning_payload(route: dict[str, Any], routing_context: dict[str, Any
         "constraint_violation_rate": float(traj.get("constraint_violation_rate", 0.0)),
         "invalid_action_rate": float(traj.get("invalid_action_rate", 0.0)),
         "mean_progress_delta": float(traj.get("mean_progress_delta", 0.0)),
+        "remaining_recovery_gap": float(env.get("remaining_recovery_gap", 1.0)),
+        "completion_feasibility": float(env.get("completion_feasibility", 0.0)),
+        "resource_floor_risk": float(env.get("resource_floor_risk", 0.0)),
+        "phase_recommendation": str(env.get("phase_recommendation", "balanced_progress")),
+        "safe_completion_window": bool(env.get("safe_completion_window", False)),
         "latest_feedback_summary": _summarize_feedback(previous_feedback),
+    }
+
+
+def _extract_phase_contract(planning_json: dict[str, Any], previous_feedback: dict[str, Any] | None = None) -> dict[str, Any]:
+    default_mode = str(planning_json.get("phase_mode", "balanced_progress")).strip().lower() or "balanced_progress"
+    if isinstance(previous_feedback, dict) and str(previous_feedback.get("phase_guidance", "")) == "switch":
+        default_mode = str(previous_feedback.get("next_phase_mode", default_mode)).strip().lower() or default_mode
+    duration = planning_json.get("phase_duration", 8)
+    if isinstance(previous_feedback, dict) and str(previous_feedback.get("phase_guidance", "")) == "extend":
+        try:
+            duration = int(duration) + 2
+        except (TypeError, ValueError):
+            duration = 10
+    try:
+        duration = int(duration)
+    except (TypeError, ValueError):
+        duration = 8
+    duration = int(np.clip(duration, 2, 80))
+    try:
+        resource_floor_target = float(planning_json.get("resource_floor_target", 0.12))
+    except (TypeError, ValueError):
+        resource_floor_target = 0.12
+    resource_floor_target = float(np.clip(resource_floor_target, 0.05, 0.40))
+    completion_push_allowed = bool(planning_json.get("completion_push_allowed", True))
+    try:
+        late_stage_trigger = float(planning_json.get("late_stage_trigger", 0.72))
+    except (TypeError, ValueError):
+        late_stage_trigger = 0.72
+    late_stage_trigger = float(np.clip(late_stage_trigger, 0.50, 0.95))
+    if default_mode not in {"critical_push", "capability_unblock", "balanced_progress", "late_finish", "resource_preserve"}:
+        default_mode = "balanced_progress"
+    return {
+        "phase_mode": default_mode,
+        "phase_duration": duration,
+        "resource_floor_target": resource_floor_target,
+        "completion_push_allowed": completion_push_allowed,
+        "late_stage_trigger": late_stage_trigger,
     }
 
 
@@ -1582,6 +1743,10 @@ def main() -> None:
             ),
             encoding="utf-8",
         )
+        phase_contract = _extract_phase_contract(
+            planning_json,
+            previous_feedback=(history[-1].get("llm_feedback", {}) if history else None),
+        )
 
         round_candidates: list[dict[str, Any]] = []
         candidate_styles = _resolve_candidate_styles(cfg)
@@ -1723,6 +1888,7 @@ def main() -> None:
                     intrinsic_mode=args.intrinsic_mode,
                     intrinsic_scale=args.intrinsic_scale,
                     env_reset_options=_build_benchmark_reset_options(cfg),
+                    phase_contract=phase_contract,
                 )
                 metrics["selected_task"] = route.get("task_mode")
                 metrics["llm_effective_mode"] = client.effective_mode()
@@ -1809,6 +1975,7 @@ def main() -> None:
                 intrinsic_mode=args.intrinsic_mode,
                 intrinsic_scale=args.intrinsic_scale,
                 env_reset_options=_build_benchmark_reset_options(cfg),
+                phase_contract=phase_contract,
             )
             anchor_metrics["selected_task"] = route.get("task_mode")
             anchor_metrics["llm_effective_mode"] = "deterministic_anchor"
@@ -1884,6 +2051,7 @@ def main() -> None:
                 intrinsic_mode="off",
                 intrinsic_scale=1.0,
                 env_reset_options=_build_benchmark_reset_options(cfg),
+                phase_contract=phase_contract,
             )
             attempt_metrics["backstop_seed"] = backstop_seed
             attempt_metrics["is_strict_safe"] = bool(
@@ -1951,6 +2119,11 @@ def main() -> None:
                 "weakest_layer": planning_json.get("weakest_layer", ""),
                 "weakest_zone": planning_json.get("weakest_zone", ""),
                 "finishing_strategy": planning_json.get("finishing_strategy", ""),
+                "phase_mode": phase_contract.get("phase_mode", "balanced_progress"),
+                "phase_duration": phase_contract.get("phase_duration", 8),
+                "resource_floor_target": phase_contract.get("resource_floor_target", 0.12),
+                "completion_push_allowed": phase_contract.get("completion_push_allowed", True),
+                "late_stage_trigger": phase_contract.get("late_stage_trigger", 0.72),
             },
             previous_feedback=(history[-1].get("llm_feedback", {}) if history else None),
         )

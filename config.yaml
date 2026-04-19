@@ -23,6 +23,14 @@ benchmark:
   preset_jitter: 0.0
   fixed_severity: ""
 
+evaluation:
+  fixed_budget:
+    enabled: true
+    max_steps: 15
+  completion_budget:
+    enabled: true
+    max_steps: 40
+
 env:
   name: project_recovery
   max_steps: 90
