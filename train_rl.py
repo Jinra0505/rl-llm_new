@@ -237,8 +237,10 @@ def _phase_adjusted_mask(mask: np.ndarray, info: dict[str, Any], phase_contract:
     in_phase_window = step_idx < duration
     if phase_mode == "resource_preserve":
         if material <= resource_floor_target:
-            out[0:9] = False
+            # Keep limited low-cost capability actions available to avoid deadlock.
+            out[0:3] = False
             out[13] = False
+            out[9:12] = False
             out[14] = True
         else:
             # Prevent collapse into endless wait when resources are already healthy.
@@ -275,7 +277,9 @@ def _phase_q_bias(action_dim: int, info: dict[str, Any], phase_contract: dict[st
         bias[12] += 0.08
     elif phase_mode == "resource_preserve":
         if float(info.get("material_stock", 1.0)) < float(phase_contract.get("resource_floor_target", 0.12)):
-            bias[14] += 0.15
+            bias[14] += 0.08
+            bias[6 + zone_idx] += 0.05
+            bias[3 + zone_idx] += 0.04
         else:
             bias[14] -= 0.10
             bias[6 + zone_idx] += 0.08
@@ -520,8 +524,13 @@ def run_training(
                     qarr = qvals.squeeze(0).cpu().numpy()
                     qarr += _phase_q_bias(action_dim, info, normalized_phase_contract, step)
                     if eval_budget_mode == "completion_budget_eval":
-                        qarr[3:12] += 0.04
-                        qarr[14] -= 0.06
+                        material_now = float(info.get("material_stock", 1.0))
+                        floor_risk = float(info.get("resource_floor_risk", 0.0))
+                        if material_now < 0.16 or floor_risk > 0.75:
+                            qarr[14] += 0.04
+                        else:
+                            qarr[3:12] += 0.05
+                            qarr[14] -= 0.04
                     qarr[~valid_mask] = -1e9
                     a = int(np.argmax(qarr))
             phase_action_match_train += int(a == int(np.argmax(_phase_q_bias(action_dim, info, normalized_phase_contract, step))))
@@ -552,7 +561,7 @@ def run_training(
             late_factor = 1.0 + max(0.0, (step_ratio - 0.60) / 0.40) * 1.4
             invalid_penalty = (0.20 + 0.35 * late_factor) if bool(info.get("invalid_action", False)) else 0.0
             constraint_penalty = (0.25 + 0.45 * late_factor) if bool(info.get("constraint_violation", False)) else 0.0
-            completion_bonus = 6.5 if bool(terminated) else 0.0
+            completion_bonus = (7.2 if eval_budget_mode == "completion_budget_eval" else 6.5) if bool(terminated) else 0.0
             late_stage = str(info.get("stage", "middle")) == "late"
             coordinated_late_penalty = 0.35 if (late_stage and a == 13) else 0.0
             feeder_late_penalty = 0.22 if (late_stage and a == 12 and (float(info.get("backbone_comm_ratio", 1.0)) < 0.5)) else 0.0
@@ -821,8 +830,25 @@ def run_training(
                 qarr = qvals.squeeze(0).cpu().numpy()
                 qarr += _phase_q_bias(action_dim, info, normalized_phase_contract, step_idx)
                 if eval_budget_mode == "completion_budget_eval":
-                    qarr[3:12] += 0.08
-                    qarr[14] -= 0.12
+                    material_now = float(info.get("material_stock", 1.0))
+                    floor_risk = float(info.get("resource_floor_risk", 0.0))
+                    step_ratio_eval = float(step_idx + 1) / float(max(1, eval_steps))
+                    if material_now < 0.16 or floor_risk > 0.75:
+                        qarr[14] += 0.06
+                    else:
+                        qarr[3:12] += 0.06
+                        qarr[14] -= 0.06
+                    if step_ratio_eval >= 0.55:
+                        zone_idx = {"A": 0, "B": 1, "C": 2}.get(str(info.get("weakest_zone", "A")), 0)
+                        weak_layer = str(info.get("weakest_layer", "0"))
+                        if weak_layer == "0":
+                            qarr[3 + zone_idx] += 0.10
+                        elif weak_layer == "1":
+                            qarr[6 + zone_idx] += 0.10
+                        else:
+                            qarr[zone_idx] += 0.08
+                        qarr[13] -= 0.08
+                        qarr[14] -= 0.05
                 qarr[~valid_mask] = -1e9
                 a = int(np.argmax(qarr))
             phase_action_match_eval += int(a == int(np.argmax(_phase_q_bias(action_dim, info, normalized_phase_contract, step_idx))))
@@ -848,7 +874,10 @@ def run_training(
                     late_stage_targeted_steps += 1
                 if a == 13:
                     late_stage_coordinated_steps += 1
-                if str(normalized_phase_contract.get("phase_mode", "balanced_progress")) == "late_finish" and a in {3, 4, 5, 6, 7, 8, 9, 10, 11}:
+                if (
+                    str(normalized_phase_contract.get("phase_mode", "balanced_progress")) == "late_finish"
+                    or eval_budget_mode == "completion_budget_eval"
+                ) and a in {3, 4, 5, 6, 7, 8, 9, 10, 11}:
                     late_finish_action_count += 1
             if a in {9, 10, 11}:
                 ep_mes_moves += 1

@@ -171,8 +171,9 @@ def run_outer_pipeline(mode: str, seed: int, reward_mode: str, split_name: str, 
     cfg_path = out_path.parent / f"tmp_cfg_{mode}_{split_name}_{eval_budget_mode}_seed{seed}.yaml"
     cfg_path.write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
 
-    rounds = "1" if mode == "single_shot_llm" else "2"
-    candidates = "1" if mode == "single_shot_llm" else "2"
+    outer_cfg = cfg.get("outer_loop", {}) if isinstance(cfg.get("outer_loop"), dict) else {}
+    rounds = "1" if mode == "single_shot_llm" else str(int(outer_cfg.get("rounds", 2)))
+    candidates = "1" if mode == "single_shot_llm" else str(int(outer_cfg.get("candidates_per_round", 2)))
     before = {p.name for p in run_root.glob("run_*") if p.is_dir()}
     cmd = [
         "python3",

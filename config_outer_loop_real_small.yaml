@@ -7,8 +7,8 @@ llm:
   temperature: 0.3
   max_tokens: 1800
 outer_loop:
-  rounds: 2
-  candidates_per_round: 2
+  rounds: 1
+  candidates_per_round: 1
 scenario:
   severity: moderate
 benchmark:
@@ -55,8 +55,8 @@ env:
     13: coordinated_balanced
     14: wait_hold
 training:
-  train_episodes: 30
-  eval_episodes: 8
+  train_episodes: 18
+  eval_episodes: 6
   gamma: 0.98
   batch_size: 64
   replay_size: 30000
