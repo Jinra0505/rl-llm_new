@@ -2,13 +2,13 @@ llm:
   base_url: https://api.deepseek.com
   model_chat: deepseek-chat
   model_reasoner: deepseek-reasoner
-  timeout_seconds: 60
-  max_retries: 2
+  timeout_seconds: 90
+  max_retries: 1
   temperature: 0.3
   max_tokens: 1800
 outer_loop:
-  rounds: 2
-  candidates_per_round: 2
+  rounds: 1
+  candidates_per_round: 1
 scenario:
   severity: moderate
 benchmark:
@@ -19,6 +19,13 @@ benchmark:
   preset_name: ""
   preset_jitter: 0.0
   fixed_severity: ""
+evaluation:
+  fixed_budget:
+    enabled: true
+    max_steps: 20
+  completion_budget:
+    enabled: true
+    max_steps: 50
 env:
   name: project_recovery
   max_steps: 40
@@ -48,8 +55,8 @@ env:
     13: coordinated_balanced
     14: wait_hold
 training:
-  train_episodes: 30
-  eval_episodes: 8
+  train_episodes: 14
+  eval_episodes: 6
   gamma: 0.98
   batch_size: 64
   replay_size: 30000
@@ -69,12 +76,13 @@ selection:
     - aggressive_recovery_first
   task_mode_metric_weights:
     __global__:
-      eval_success_rate: 0.48
-      critical_load_recovery_ratio: 0.24
-      min_recovery_ratio: 0.18
+      eval_success_rate: 0.22
+      critical_load_recovery_ratio: 0.22
+      min_recovery_ratio: 0.22
       mean_progress_delta_eval: 0.16
-      constraint_violation_rate_eval: -0.18
-      late_stage_targeted_action_rate: 0.1
+      constraint_violation_rate_eval: -0.26
+      invalid_action_rate_eval: -0.18
+      late_stage_targeted_action_rate: 0.12
   stability_guard:
     enabled: true
     small_score_gain_max: 0.02

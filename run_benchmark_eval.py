@@ -33,6 +33,10 @@ DEFAULT_CFG: dict[str, Any] = {
         "preset_jitter": 0.0,
         "fixed_severity": "moderate",
     },
+    "evaluation": {
+        "fixed_budget": {"enabled": True, "max_steps": 15},
+        "completion_budget": {"enabled": True, "max_steps": 40},
+    },
     "training": {
         "train_episodes": 20,
         "eval_episodes": 6,
@@ -59,6 +63,43 @@ DEFAULT_CFG: dict[str, Any] = {
 }
 
 
+def _deep_update(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+    for k, v in patch.items():
+        if isinstance(v, dict) and isinstance(base.get(k), dict):
+            _deep_update(base[k], v)
+        else:
+            base[k] = v
+    return base
+
+
+def load_cfg(config_path: str) -> dict[str, Any]:
+    cfg = copy.deepcopy(DEFAULT_CFG)
+    if not config_path:
+        return cfg
+    loaded = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
+    if isinstance(loaded, dict):
+        _deep_update(cfg, loaded)
+    return cfg
+
+
+def resolve_eval_budget(cfg: dict[str, Any], requested_mode: str) -> tuple[str, int]:
+    ev = cfg.get("evaluation", {}) if isinstance(cfg.get("evaluation"), dict) else {}
+    fixed = ev.get("fixed_budget", {}) if isinstance(ev.get("fixed_budget"), dict) else {}
+    completion = ev.get("completion_budget", {}) if isinstance(ev.get("completion_budget"), dict) else {}
+    env_steps = int(cfg.get("env", {}).get("max_steps", 15))
+
+    if requested_mode == "completion_budget_eval":
+        return "completion_budget_eval", int(completion.get("max_steps", max(env_steps, 40)))
+    if requested_mode == "fixed_budget_eval":
+        return "fixed_budget_eval", int(fixed.get("max_steps", min(env_steps, 15)))
+
+    if bool(completion.get("enabled", False)):
+        return "completion_budget_eval", int(completion.get("max_steps", max(env_steps, 40)))
+    if bool(fixed.get("enabled", False)):
+        return "fixed_budget_eval", int(fixed.get("max_steps", min(env_steps, 15)))
+    return "fixed_budget_eval", env_steps
+
+
 def build_reset_options(*, benchmark_mode: str, split_name: str, preset_group: str, preset_name: str, preset_jitter: float, severity: str) -> callable:
     def _resolver(phase: str, episode_idx: int) -> dict[str, Any]:
         phase_split = split_name
@@ -77,16 +118,18 @@ def build_reset_options(*, benchmark_mode: str, split_name: str, preset_group: s
     return _resolver
 
 
-def run_baseline(seed: int, reward_mode: str, split_name: str, preset_group: str, preset_name: str, preset_jitter: float, severity: str, out_path: Path) -> dict[str, Any]:
-    cfg = copy.deepcopy(DEFAULT_CFG)
+def run_baseline(seed: int, reward_mode: str, split_name: str, preset_group: str, preset_name: str, preset_jitter: float, severity: str, out_path: Path, cfg: dict[str, Any], eval_budget_mode: str, eval_max_steps: int) -> dict[str, Any]:
     dqn_cfg = dict(cfg["training"])
     dqn_cfg["reward_mode"] = reward_mode
+    train_max_steps = int(cfg["env"].get("max_steps", 60))
     metrics = run_training(
         revise_module_path=Path("baseline_noop.py"),
         env_name=str(cfg["env"]["name"]),
         train_episodes=int(dqn_cfg.get("train_episodes", 20)),
         eval_episodes=int(dqn_cfg.get("eval_episodes", 6)),
-        max_steps_per_episode=int(cfg["env"]["max_steps"]),
+        max_steps_per_episode=train_max_steps,
+        train_max_steps_per_episode=train_max_steps,
+        eval_max_steps_per_episode=int(eval_max_steps),
         gamma=float(dqn_cfg.get("gamma", 0.98)),
         task_mode="global_efficiency_priority",
         llm_mode="real",
@@ -104,12 +147,16 @@ def run_baseline(seed: int, reward_mode: str, split_name: str, preset_group: str
             preset_jitter=preset_jitter,
             severity=severity,
         ),
+        eval_budget_mode=eval_budget_mode,
     )
+    metrics["train_max_steps"] = train_max_steps
+    metrics["eval_budget_mode"] = eval_budget_mode
+    metrics["eval_max_steps"] = int(eval_max_steps)
     return metrics
 
 
-def run_outer_pipeline(mode: str, seed: int, reward_mode: str, split_name: str, preset_group: str, preset_name: str, preset_jitter: float, severity: str, out_path: Path) -> dict[str, Any]:
-    cfg = copy.deepcopy(DEFAULT_CFG)
+def run_outer_pipeline(mode: str, seed: int, reward_mode: str, split_name: str, preset_group: str, preset_name: str, preset_jitter: float, severity: str, out_path: Path, cfg: dict[str, Any], eval_budget_mode: str, eval_max_steps: int) -> dict[str, Any]:
+    cfg = copy.deepcopy(cfg)
     cfg["training"]["reward_mode"] = reward_mode
     cfg["benchmark"]["split_name"] = split_name
     cfg["benchmark"]["preset_group"] = preset_group
@@ -120,11 +167,18 @@ def run_outer_pipeline(mode: str, seed: int, reward_mode: str, split_name: str, 
     run_root = out_path.parent / "outer_loop_runs"
     run_root.mkdir(parents=True, exist_ok=True)
     cfg["paths"]["outputs_dir"] = str(run_root)
-    cfg_path = out_path.parent / f"tmp_cfg_{mode}_{split_name}_seed{seed}.yaml"
+    cfg["benchmark_runtime"] = {"eval_max_steps": int(eval_max_steps), "eval_budget_mode": eval_budget_mode}
+    cfg_path = out_path.parent / f"tmp_cfg_{mode}_{split_name}_{eval_budget_mode}_seed{seed}.yaml"
     cfg_path.write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
 
-    rounds = "1" if mode == "single_shot_llm" else "2"
-    candidates = "1" if mode == "single_shot_llm" else "2"
+    outer_cfg = cfg.get("outer_loop", {}) if isinstance(cfg.get("outer_loop"), dict) else {}
+    if mode == "single_shot_llm":
+        rounds = "1"
+        candidates = "1"
+    else:
+        # Keep full outer-loop materially different from single-shot.
+        rounds = str(max(2, int(outer_cfg.get("rounds", 2))))
+        candidates = str(max(1, int(outer_cfg.get("candidates_per_round", 2))))
     before = {p.name for p in run_root.glob("run_*") if p.is_dir()}
     cmd = [
         "python3",
@@ -145,7 +199,17 @@ def run_outer_pipeline(mode: str, seed: int, reward_mode: str, split_name: str, 
         "--config",
         str(cfg_path),
     ]
-    subprocess.run(cmd, check=True, capture_output=True, text=True)
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as exc:
+        err_tail = (exc.stderr or "").strip()[-3000:]
+        out_tail = (exc.stdout or "").strip()[-1000:]
+        raise RuntimeError(
+            "Outer-loop subprocess failed.\n"
+            f"cmd={' '.join(cmd)}\n"
+            f"stdout_tail:\n{out_tail}\n"
+            f"stderr_tail:\n{err_tail}"
+        ) from exc
     all_runs = sorted([p for p in run_root.glob("run_*") if p.is_dir()])
     candidate_runs = [p for p in all_runs if p.name not in before] or all_runs
     latest = None
@@ -172,6 +236,8 @@ def run_outer_pipeline(mode: str, seed: int, reward_mode: str, split_name: str, 
     metrics["completed"] = bool(run_status.get("completed", False))
     metrics["failed"] = bool(run_status.get("failed", True))
     metrics["artifact_run_dir"] = str(latest)
+    metrics["eval_budget_mode"] = eval_budget_mode
+    metrics["eval_max_steps"] = int(eval_max_steps)
     out_path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
     return metrics
 
@@ -186,10 +252,15 @@ def main() -> None:
     parser.add_argument("--preset-name", default="")
     parser.add_argument("--preset-jitter", type=float, default=0.0)
     parser.add_argument("--severity", choices=["mild", "moderate", "severe"], default="moderate")
+    parser.add_argument("--config", default="")
+    parser.add_argument("--eval-budget", choices=["auto", "fixed_budget_eval", "completion_budget_eval"], default="auto")
     parser.add_argument("--out", default="")
     args = parser.parse_args()
 
-    out_path = Path(args.out) if args.out else Path("outputs") / "benchmark_eval" / f"{args.mode}__{args.reward_mode}__{args.split_name}__seed{args.seed}.json"
+    cfg = load_cfg(args.config)
+    eval_budget_mode, eval_max_steps = resolve_eval_budget(cfg, args.eval_budget)
+
+    out_path = Path(args.out) if args.out else Path("outputs") / "benchmark_eval" / f"{args.mode}__{args.reward_mode}__{args.split_name}__{eval_budget_mode}__seed{args.seed}.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     if args.mode == "baseline_rl":
@@ -202,6 +273,9 @@ def main() -> None:
             args.preset_jitter,
             args.severity,
             out_path,
+            cfg,
+            eval_budget_mode,
+            eval_max_steps,
         )
     else:
         metrics = run_outer_pipeline(
@@ -214,21 +288,35 @@ def main() -> None:
             args.preset_jitter,
             args.severity,
             out_path,
+            cfg,
+            eval_budget_mode,
+            eval_max_steps,
         )
 
+    outer_cfg = cfg.get("outer_loop", {}) if isinstance(cfg.get("outer_loop"), dict) else {}
+    summary_rounds = 1 if args.mode == "single_shot_llm" else max(2, int(outer_cfg.get("rounds", 2)))
+    summary_candidates = 1 if args.mode == "single_shot_llm" else max(1, int(outer_cfg.get("candidates_per_round", 2)))
     summary = {
         "mode": args.mode,
         "seed": int(args.seed),
         "split_name": args.split_name,
         "reward_mode": args.reward_mode,
-        "rounds": 1 if args.mode == "single_shot_llm" else 2,
-        "candidates_per_round": 1 if args.mode == "single_shot_llm" else 2,
+        "eval_budget_mode": eval_budget_mode,
+        "train_max_steps": int(metrics.get("train_max_steps", cfg.get("env", {}).get("max_steps", eval_max_steps))),
+        "eval_max_steps": int(eval_max_steps),
+        "rounds": int(summary_rounds),
+        "candidates_per_round": int(summary_candidates),
         "selection_score": float(metrics.get("selection_score", 0.0)),
         "min_recovery_ratio": float(metrics.get("min_recovery_ratio", 0.0)),
         "constraint_violation_rate_eval": float(metrics.get("constraint_violation_rate_eval", 0.0)),
         "invalid_action_rate_eval": float(metrics.get("invalid_action_rate_eval", metrics.get("invalid_action_rate", 0.0))),
         "lipschitz_mean": float(metrics.get("lipschitz_mean", 0.0)),
         "wait_hold_usage_eval": float(metrics.get("wait_hold_usage_eval", metrics.get("wait_hold_usage", 0.0))),
+        "eval_success_rate": float(metrics.get("eval_success_rate", metrics.get("success_rate", 0.0))),
+        "eval_terminated_count": int(metrics.get("eval_terminated_count", 0)),
+        "eval_truncated_count": int(metrics.get("eval_truncated_count", 0)),
+        "completion_window_entries": float(metrics.get("completion_window_entries", 0.0)),
+        "late_finish_action_share_eval": float(metrics.get("late_finish_action_share_eval", 0.0)),
         "completed": bool(metrics.get("completed", True)),
         "failed": bool(metrics.get("failed", False)),
         "output_json": str(out_path),
