@@ -84,7 +84,7 @@ PRESET_LIBRARY: dict[str, dict[str, Any]] = {
         "critical": [0.61, 0.59, 0.57],
         "backbone": [0.48, 0.46, 0.44],
         "mes_soc": 0.30,
-        "material": 0.12,
+        "material": 0.14,
         "switching": 0.36,
     },
     "resource_constrained_case_r2": {
@@ -104,7 +104,7 @@ PRESET_LIBRARY: dict[str, dict[str, Any]] = {
         "critical": [0.63, 0.61, 0.59],
         "backbone": [0.45, 0.43, 0.41],
         "mes_soc": 0.26,
-        "material": 0.10,
+        "material": 0.13,
         "switching": 0.32,
     },
 }
