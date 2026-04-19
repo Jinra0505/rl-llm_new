@@ -67,7 +67,7 @@ Round-2 switching rule:
 - If previous round shows low success, low progress, or unfinished middle-stage behavior, switch task_mode from previous round unless there is strong evidence the same task is still the dominant bottleneck.
 """
 
-PLANNING_PROMPT = """Using the routing context + task_mode + stage, produce a concise shaping planning JSON.
+PLANNING_PROMPT = """Using the routing context + task_mode + stage, produce a concise shaping + phase planning JSON.
 Required keys:
 - weakest_layer
 - weakest_zone
@@ -78,6 +78,11 @@ Required keys:
 - should_avoid (array)
 - finishing_strategy
 - codegen_guidance
+- phase_mode
+- phase_duration
+- resource_floor_target
+- completion_push_allowed
+- late_stage_trigger
 Output format requirements (strict):
 - Return one compact JSON object only (no markdown, no prose outside JSON, no code fences)
 - Use exactly the required keys above
@@ -91,6 +96,11 @@ Output format requirements (strict):
   - should_avoid: short array (0-6 items, short strings)
   - finishing_strategy: short string
   - codegen_guidance: short string
+  - phase_mode: one of critical_push|capability_unblock|balanced_progress|late_finish|resource_preserve
+  - phase_duration: integer 2-80
+  - resource_floor_target: float 0.05-0.40
+  - completion_push_allowed: boolean
+  - late_stage_trigger: float 0.50-0.95
 - Keep all strings concise and operational; avoid long narratives
 Planning constraints:
 - avoid invalid or precondition-violating actions
@@ -114,6 +124,11 @@ Required keys (exactly):
 - should_reward (array, up to 4 short items)
 - should_avoid (array, up to 4 short items)
 - codegen_guidance (short string)
+- phase_mode (string enum)
+- phase_duration (int 2-80)
+- resource_floor_target (float 0.05-0.40)
+- completion_push_allowed (bool)
+- late_stage_trigger (float 0.50-0.95)
 Rules:
 - Keep every string very short and operational.
 - No long rationale text.
@@ -127,6 +142,9 @@ Output schema (fixed keys only):
   "keep_signals": ["short phrase", "..."],
   "avoid_patterns": ["short phrase", "..."],
   "finish_strategy_adjustments": ["short phrase", "..."],
+  "phase_guidance": "keep|switch|extend",
+  "next_phase_mode": "critical_push|capability_unblock|balanced_progress|late_finish|resource_preserve",
+  "next_phase_duration": 8,
   "confidence": 0.0
 }
 Rules:
