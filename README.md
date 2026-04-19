@@ -17,6 +17,11 @@ After recognition, you may optionally run:
 **Task override logic is removed.**
 The recognized task comes directly from task recognition output (rule mode or LLM classification output) and is not post-corrected by forced engineering overrides.
 
+## Installation
+```bash
+python -m pip install -r requirements.txt
+```
+
 ## Project structure
 - `task_recognition_prompt.py`: builds recognition prompt from scenario summary.
 - `task_recognizer.py`: three-task recognizer (rule + LLM).
@@ -43,6 +48,23 @@ python run_task_recognition.py --mode llm --llm-mode real
 ## Run: optional downstream pipeline
 ```bash
 python run_outer_loop.py --env project_recovery --llm-mode real --router-mode llm --reroute-each-round --config config.yaml
+```
+
+## Run: iterative diagnosis protocol (6 conditions × 3 seeds)
+Use this helper to execute a full diagnosis pass over:
+- `baseline_rl` / `single_shot_llm` / `full_outer_loop`
+- each under `clean` and `engineered` rewards
+- default seeds `42 43 44`
+
+It writes per-iteration artifacts under `outputs/diagnosis_protocol/` and a consolidated `protocol_report.json`.
+
+```bash
+python experiments/run_diagnosis_protocol.py \
+  --config config_outer_loop_real_small.yaml \
+  --split-name benchmark_resource_constrained_presets \
+  --seeds 42 43 44 \
+  --max-iterations 2 \
+  --resume
 ```
 
 ## Notes
