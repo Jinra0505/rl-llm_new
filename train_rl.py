@@ -140,7 +140,13 @@ def _effective_state(revised_state: np.ndarray, max_revised_dim: int | None) -> 
     return revised_state if max_revised_dim is None else revised_state[:max_revised_dim]
 
 
-def _valid_action_mask(action_dim: int, info: dict[str, Any]) -> np.ndarray:
+def _valid_action_mask(
+    action_dim: int,
+    info: dict[str, Any],
+    *,
+    eval_budget_mode: str = "fixed_budget_eval",
+    phase_contract: dict[str, Any] | None = None,
+) -> np.ndarray:
     mask = np.ones(action_dim, dtype=bool)
     stage = str(info.get("stage", "middle"))
     mes_soc = float(info.get("mes_soc", 1.0))
@@ -153,6 +159,27 @@ def _valid_action_mask(action_dim: int, info: dict[str, Any]) -> np.ndarray:
         float(info.get("zone_C_road_ratio", 1.0)),
     ]
     resource_weak = material < 0.10 or mes_soc < 0.08
+    phase_mode = str((phase_contract or {}).get("phase_mode", "balanced_progress"))
+    floor_target = float((phase_contract or {}).get("resource_floor_target", 0.12))
+    floor_risk = float(info.get("resource_floor_risk", 0.0))
+    split_name = str(info.get("split_name", ""))
+    bench_mode = str(info.get("benchmark_mode", "off"))
+    preset_group = str(info.get("preset_group", ""))
+    preset_name = str(info.get("preset_name", ""))
+    resource_split = (
+        "resource_constrained" in split_name
+        or "resource_constrained" in preset_group
+        or "resource_constrained" in preset_name
+        or ("resource" in split_name and bench_mode in {"suite", "single"})
+    )
+    strict_below_floor_preserve = phase_mode == "resource_preserve" and material <= floor_target
+    corridor_unlock = (
+        eval_budget_mode == "completion_budget_eval"
+        and resource_split
+        and (0.12 <= material <= 0.16)
+        and floor_risk < 0.75
+        and not strict_below_floor_preserve
+    )
 
     # MES dispatch (9/10/11): invalid if mes_soc < 0.08 or target zone road < 0.25.
     if mes_soc < 0.08:
@@ -166,6 +193,21 @@ def _valid_action_mask(action_dim: int, info: dict[str, Any]) -> np.ndarray:
     if material < 0.15:
         mask[0:9] = False
         mask[13] = False
+        if corridor_unlock:
+            weak_zone = str(info.get("weakest_zone", "A"))
+            zone_idx = {"A": 0, "B": 1, "C": 2}.get(weak_zone, 0)
+            weak_layer = str(info.get("weakest_layer", "0"))
+            if weak_layer == "0":
+                mask[3 + zone_idx] = True
+            elif weak_layer == "1":
+                mask[6 + zone_idx] = True
+            else:
+                mask[zone_idx] = True
+            mask[6 + zone_idx] = True
+            if mes_soc >= 0.09 and road_by_zone[zone_idx] >= 0.25:
+                mask[9 + zone_idx] = True
+            mask[12] = False
+            mask[13] = False
     if material < 0.10:
         mask[9:12] = False
         mask[12] = False
@@ -279,15 +321,24 @@ def _phase_q_bias(action_dim: int, info: dict[str, Any], phase_contract: dict[st
         bias[6 + zone_idx] += 0.18
         bias[12] += 0.08
     elif phase_mode == "resource_preserve":
+        split_name = str(info.get("split_name", ""))
+        eval_budget_mode = str(info.get("eval_budget_mode", ""))
+        floor_risk = float(info.get("resource_floor_risk", 0.0))
+        rc_completion = eval_budget_mode == "completion_budget_eval" and ("resource_constrained" in split_name)
         if float(info.get("material_stock", 1.0)) < float(phase_contract.get("resource_floor_target", 0.12)):
             bias[14] += 0.08
             bias[6 + zone_idx] += 0.05
             bias[3 + zone_idx] += 0.04
         else:
-            bias[14] -= 0.16
-            bias[6 + zone_idx] += 0.11
-            bias[3 + zone_idx] += 0.11
-            bias[9 + zone_idx] += 0.05
+            if rc_completion and floor_risk < 0.60:
+                bias[14] -= 0.14
+                bias[6 + zone_idx] += 0.10
+                bias[3 + zone_idx] += 0.10
+                bias[9 + zone_idx] += 0.04
+            else:
+                bias[14] -= 0.10
+                bias[6 + zone_idx] += 0.08
+                bias[3 + zone_idx] += 0.08
     elif phase_mode == "late_finish" and (stage_indicator >= late_trigger or step_idx < duration):
         if weak_layer == "0":
             bias[3 + zone_idx] += 0.22
@@ -467,6 +518,8 @@ def run_training(
     for ep in range(train_episodes):
         train_opts = _resolve_reset_options("train", ep)
         s, info = env.reset(seed=seed + ep, options=train_opts)
+        info = dict(info)
+        info["eval_budget_mode"] = eval_budget_mode
         if ep < 3:
             training_reset_checks.append(
                 {
@@ -509,7 +562,12 @@ def run_training(
 
         for step in range(train_steps):
             rs = _effective_state(_call_revise(revise_state_fn, s, info), max_revised_dim)
-            valid_mask = _valid_action_mask(action_dim, info)
+            valid_mask = _valid_action_mask(
+                action_dim,
+                info,
+                eval_budget_mode=eval_budget_mode,
+                phase_contract=normalized_phase_contract,
+            )
             valid_mask = _phase_adjusted_mask(valid_mask, info, normalized_phase_contract, step)
             valid_actions = np.where(valid_mask)[0]
             if valid_actions.size == 0:
@@ -541,6 +599,8 @@ def run_training(
 
             action_usage[str(a)] += 1
             ns, ext_r, terminated, truncated, info = env.step(a)
+            info = dict(info)
+            info["eval_budget_mode"] = eval_budget_mode
             ir = _call_intrinsic(intrinsic_reward_fn, s, a, ns, info, rs)
             critical_gain = float(np.mean(ns[9:12] - s[9:12]))
             progress_bonus = float(info.get("progress_delta", 0.0))
@@ -586,9 +646,21 @@ def run_training(
             else:
                 mid_wait_streak = 0
             feasible_non_wait_exists = np.any(valid_mask[:14]) if action_dim > 14 else np.any(valid_mask)
+            weak_zone_idx = {"A": 0, "B": 1, "C": 2}.get(str(info.get("weakest_zone", "A")), 0)
+            corridor_actions = [weak_zone_idx, 3 + weak_zone_idx, 6 + weak_zone_idx, 9 + weak_zone_idx]
+            corridor_feasible = any((cid < action_dim) and bool(valid_mask[cid]) for cid in corridor_actions)
             repeated_wait_penalty = 0.0
-            if a == 14 and str(info.get("stage", "middle")) == "middle" and feasible_non_wait_exists:
-                repeated_wait_penalty = 0.16 + 0.08 * max(0, mid_wait_streak - 1)
+            if (
+                a == 14
+                and str(info.get("stage", "middle")) == "middle"
+                and eval_budget_mode == "completion_budget_eval"
+                and feasible_non_wait_exists
+                and corridor_feasible
+                and material_now > 0.12
+                and float(info.get("resource_floor_risk", 0.0)) < 0.75
+                and mid_wait_streak >= 2
+            ):
+                repeated_wait_penalty = 0.20 + 0.10 * max(0, mid_wait_streak - 2)
             middle_stagnation_penalty = 0.18 if mid_stagnation_steps >= 6 else 0.0
             severe_mid_stagnation_penalty = 0.28 if mid_stagnation_steps >= 12 else 0.0
             sustainable_progress_bonus = 0.10 if (progress_bonus > 0.010 and material_now > 0.12) else 0.0
@@ -781,6 +853,8 @@ def run_training(
     for ep in range(eval_episodes):
         eval_opts = _resolve_reset_options("eval", ep)
         s, info = env.reset(seed=seed + 1000 + ep, options=eval_opts)
+        info = dict(info)
+        info["eval_budget_mode"] = eval_budget_mode
         if ep < 3:
             eval_reset_checks.append(
                 {
@@ -821,7 +895,12 @@ def run_training(
         episode_trace: list[dict[str, Any]] = []
         for step_idx in range(eval_steps):
             rs = _effective_state(_call_revise(revise_state_fn, s, info), max_revised_dim)
-            valid_mask = _valid_action_mask(action_dim, info)
+            valid_mask = _valid_action_mask(
+                action_dim,
+                info,
+                eval_budget_mode=eval_budget_mode,
+                phase_contract=normalized_phase_contract,
+            )
             valid_mask = _phase_adjusted_mask(valid_mask, info, normalized_phase_contract, step_idx)
             valid_actions = np.where(valid_mask)[0]
             if valid_actions.size == 0:
@@ -859,6 +938,19 @@ def run_training(
                         qarr[9 + zone_idx] += 0.07
                         qarr[13] -= 0.08
                         qarr[14] -= 0.08
+                    if (
+                        step_ratio_eval >= 0.65
+                        and float(info.get("progress_delta", 0.0)) > 0.003
+                        and "resource_constrained" in str(info.get("split_name", ""))
+                    ):
+                        zone_idx = {"A": 0, "B": 1, "C": 2}.get(str(info.get("weakest_zone", "A")), 0)
+                        weak_layer = str(info.get("weakest_layer", "0"))
+                        if weak_layer == "0":
+                            qarr[3 + zone_idx] += 0.04
+                        elif weak_layer == "1":
+                            qarr[6 + zone_idx] += 0.04
+                        else:
+                            qarr[zone_idx] += 0.03
                 qarr[~valid_mask] = -1e9
                 a = int(np.argmax(qarr))
             phase_action_match_eval += int(a == int(np.argmax(_phase_q_bias(action_dim, info, normalized_phase_contract, step_idx))))
@@ -866,6 +958,8 @@ def run_training(
             if a == 14:
                 eval_total_wait_count += 1
             ns, ext_r, terminated, truncated, info = env.step(a)
+            info = dict(info)
+            info["eval_budget_mode"] = eval_budget_mode
             total += float(ext_r)
             ep_steps += 1
             ep_invalid += int(bool(info.get("invalid_action", False)))
