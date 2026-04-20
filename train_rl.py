@@ -245,6 +245,9 @@ def _phase_adjusted_mask(mask: np.ndarray, info: dict[str, Any], phase_contract:
         else:
             # Prevent collapse into endless wait when resources are already healthy.
             out[14] = False
+            if material >= (resource_floor_target + 0.06) and float(info.get("resource_floor_risk", 0.0)) < 0.60:
+                # Above-floor regime: avoid over-conservative coordinated waiting behavior.
+                out[13] = False
     elif phase_mode == "critical_push" and in_phase_window:
         if float(info.get("critical_load_shortfall", 0.0)) > 0.08:
             out[0:3] = False
@@ -281,9 +284,10 @@ def _phase_q_bias(action_dim: int, info: dict[str, Any], phase_contract: dict[st
             bias[6 + zone_idx] += 0.05
             bias[3 + zone_idx] += 0.04
         else:
-            bias[14] -= 0.10
-            bias[6 + zone_idx] += 0.08
-            bias[3 + zone_idx] += 0.08
+            bias[14] -= 0.16
+            bias[6 + zone_idx] += 0.11
+            bias[3 + zone_idx] += 0.11
+            bias[9 + zone_idx] += 0.05
     elif phase_mode == "late_finish" and (stage_indicator >= late_trigger or step_idx < duration):
         if weak_layer == "0":
             bias[3 + zone_idx] += 0.22
@@ -611,7 +615,7 @@ def run_training(
                     else:
                         phase_penalty += 0.08
                 elif a == 14 and progress_bonus < 0.001:
-                    phase_penalty += 0.14
+                    phase_penalty += 0.20 if eval_budget_mode == "completion_budget_eval" else 0.14
             elif phase_mode == "late_finish":
                 if float(info.get("stage_indicator", 0.0)) >= phase_late_trigger:
                     if a in {3, 4, 5, 6, 7, 8}:
@@ -832,23 +836,29 @@ def run_training(
                 if eval_budget_mode == "completion_budget_eval":
                     material_now = float(info.get("material_stock", 1.0))
                     floor_risk = float(info.get("resource_floor_risk", 0.0))
+                    floor_target = float(normalized_phase_contract.get("resource_floor_target", 0.12))
                     step_ratio_eval = float(step_idx + 1) / float(max(1, eval_steps))
-                    if material_now < 0.16 or floor_risk > 0.75:
+                    if material_now < max(0.16, floor_target) or floor_risk > 0.75:
                         qarr[14] += 0.06
                     else:
-                        qarr[3:12] += 0.06
-                        qarr[14] -= 0.06
+                        if material_now > (floor_target + 0.04) and floor_risk < 0.55:
+                            qarr[3:12] += 0.10
+                            qarr[14] -= 0.12
+                        else:
+                            qarr[3:12] += 0.06
+                            qarr[14] -= 0.06
                     if step_ratio_eval >= 0.55:
                         zone_idx = {"A": 0, "B": 1, "C": 2}.get(str(info.get("weakest_zone", "A")), 0)
                         weak_layer = str(info.get("weakest_layer", "0"))
                         if weak_layer == "0":
-                            qarr[3 + zone_idx] += 0.10
+                            qarr[3 + zone_idx] += 0.13
                         elif weak_layer == "1":
-                            qarr[6 + zone_idx] += 0.10
+                            qarr[6 + zone_idx] += 0.13
                         else:
-                            qarr[zone_idx] += 0.08
+                            qarr[zone_idx] += 0.11
+                        qarr[9 + zone_idx] += 0.07
                         qarr[13] -= 0.08
-                        qarr[14] -= 0.05
+                        qarr[14] -= 0.08
                 qarr[~valid_mask] = -1e9
                 a = int(np.argmax(qarr))
             phase_action_match_eval += int(a == int(np.argmax(_phase_q_bias(action_dim, info, normalized_phase_contract, step_idx))))

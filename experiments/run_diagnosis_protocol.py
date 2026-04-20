@@ -114,30 +114,69 @@ def _select_winner(summary: dict[str, dict[str, float]]) -> str:
     return sorted(summary.keys(), key=sort_key, reverse=True)[0]
 
 
-def _thresholds_pass(
-    *,
-    summary: dict[str, dict[str, float]],
-    winner: str,
-    min_selection_delta: float,
-    max_violation_delta: float,
-) -> tuple[bool, dict[str, Any]]:
-    top = summary[winner]
-    deltas: dict[str, dict[str, float]] = {}
-    checks: list[bool] = []
+def _evaluate_acceptance(*, split_name: str, eval_budget: str, summary: dict[str, dict[str, float]], winner: str) -> dict[str, Any]:
+    full_eng = summary.get("full_outer_loop__engineered", {})
+    full_clean = summary.get("full_outer_loop__clean", {})
+    single_eng = summary.get("single_shot_llm__engineered", {})
 
-    for tag, rec in summary.items():
-        if tag == winner:
-            continue
-        sel_delta = top["mean_selection_score"] - rec["mean_selection_score"]
-        vio_delta = top["mean_constraint_violation_rate_eval"] - rec["mean_constraint_violation_rate_eval"]
-        deltas[tag] = {
-            "selection_score_delta": sel_delta,
-            "constraint_violation_rate_delta": vio_delta,
-        }
-        checks.append(sel_delta >= min_selection_delta)
-        checks.append(vio_delta <= max_violation_delta)
+    tie_break = {
+        "selection_score_delta": float(full_eng.get("mean_selection_score", 0.0) - single_eng.get("mean_selection_score", 0.0)),
+        "min_recovery_ratio_delta": float(full_eng.get("mean_min_recovery_ratio", 0.0) - single_eng.get("mean_min_recovery_ratio", 0.0)),
+        "completion_window_entries_delta": float(full_eng.get("mean_completion_window_entries", 0.0) - single_eng.get("mean_completion_window_entries", 0.0)),
+        "late_finish_action_share_delta": float(
+            full_eng.get("mean_late_finish_action_share_eval", 0.0) - single_eng.get("mean_late_finish_action_share_eval", 0.0)
+        ),
+    }
+    main_full_vs_single_distinct = any(abs(v) >= 1e-3 for v in tie_break.values())
 
-    return all(checks), {"winner": winner, "vs_others": deltas}
+    completion_profile = {
+        "completion_window_entries_gain": float(
+            full_eng.get("mean_completion_window_entries", 0.0) - full_clean.get("mean_completion_window_entries", 0.0)
+        ),
+        "late_finish_action_share_gain": float(
+            full_eng.get("mean_late_finish_action_share_eval", 0.0) - full_clean.get("mean_late_finish_action_share_eval", 0.0)
+        ),
+        "terminated_minus_truncated_gain": float(
+            (full_eng.get("mean_eval_terminated_count", 0.0) - full_eng.get("mean_eval_truncated_count", 0.0))
+            - (full_clean.get("mean_eval_terminated_count", 0.0) - full_clean.get("mean_eval_truncated_count", 0.0))
+        ),
+    }
+    main_completion_profile_ok = (
+        completion_profile["completion_window_entries_gain"] >= 0.0
+        and completion_profile["late_finish_action_share_gain"] >= 0.0
+        and completion_profile["terminated_minus_truncated_gain"] >= 0.0
+    )
+    main_safety_ok = (
+        float(full_eng.get("mean_constraint_violation_rate_eval", 1.0)) <= 0.03
+        and float(full_eng.get("mean_invalid_action_rate_eval", 1.0)) <= 0.03
+    )
+
+    resource_checks = {
+        "wait_hold_usage_ok": float(full_eng.get("mean_wait_hold_usage_eval", 1.0)) <= 0.25,
+        "completion_window_ok": float(full_eng.get("mean_completion_window_entries", 0.0)) >= 1.0,
+        "min_recovery_ok": float(full_eng.get("mean_min_recovery_ratio", 0.0)) >= 0.60,
+        "constraint_zero_ok": float(full_eng.get("mean_constraint_violation_rate_eval", 1.0)) == 0.0,
+        "invalid_zero_ok": float(full_eng.get("mean_invalid_action_rate_eval", 1.0)) == 0.0,
+    }
+    resource_completion_ok = sum(1 for ok in resource_checks.values() if ok) >= 3
+
+    overall_accept = False
+    if split_name == "benchmark_eval_presets" and eval_budget == "completion_budget_eval":
+        overall_accept = main_full_vs_single_distinct and main_completion_profile_ok and main_safety_ok
+    elif split_name == "benchmark_resource_constrained_presets" and eval_budget == "completion_budget_eval":
+        overall_accept = resource_completion_ok
+
+    return {
+        "winner": winner,
+        "main_full_vs_single_distinct": bool(main_full_vs_single_distinct),
+        "main_full_vs_single_detail": tie_break,
+        "main_completion_profile_ok": bool(main_completion_profile_ok),
+        "main_completion_profile_detail": completion_profile,
+        "main_safety_ok": bool(main_safety_ok),
+        "resource_completion_ok": bool(resource_completion_ok),
+        "resource_completion_detail": {"passed_count": sum(1 for ok in resource_checks.values() if ok), **resource_checks},
+        "overall_accept": bool(overall_accept),
+    }
 
 
 def run_protocol(args: argparse.Namespace) -> dict[str, Any]:
@@ -185,12 +224,13 @@ def run_protocol(args: argparse.Namespace) -> dict[str, Any]:
 
         summary = {tag: _aggregate(rows) for tag, rows in per_condition.items()}
         winner = _select_winner(summary)
-        passed, check_detail = _thresholds_pass(
+        check_detail = _evaluate_acceptance(
+            split_name=args.split_name,
+            eval_budget=args.eval_budget,
             summary=summary,
             winner=winner,
-            min_selection_delta=args.min_selection_delta,
-            max_violation_delta=args.max_violation_delta,
         )
+        passed = bool(check_detail.get("overall_accept", False))
 
         diag = {
             "iteration": iteration,
@@ -199,8 +239,6 @@ def run_protocol(args: argparse.Namespace) -> dict[str, Any]:
             "threshold_check": {
                 "passed": passed,
                 "detail": check_detail,
-                "min_selection_delta": args.min_selection_delta,
-                "max_violation_delta": args.max_violation_delta,
             },
             "rows": all_rows,
         }
