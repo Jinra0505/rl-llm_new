@@ -5,3 +5,9 @@ __pycache__/
 # Experiment artifacts
 outputs/
 reports/
+exports/
+
+# Packaged/binary artifacts
+*.zip
+*.tar
+*.tar.gz

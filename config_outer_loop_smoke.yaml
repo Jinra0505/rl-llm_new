@@ -11,6 +11,13 @@ outer_loop:
   candidates_per_round: 1
 scenario:
   severity: moderate
+evaluation:
+  fixed_budget:
+    enabled: true
+    max_steps: 12
+  completion_budget:
+    enabled: true
+    max_steps: 22
 env:
   name: project_recovery
   max_steps: 25
@@ -57,12 +64,13 @@ selection:
   higher_is_better: true
   task_mode_metric_weights:
     __global__:
-      eval_success_rate: 0.48
-      critical_load_recovery_ratio: 0.24
-      min_recovery_ratio: 0.18
+      eval_success_rate: 0.22
+      critical_load_recovery_ratio: 0.22
+      min_recovery_ratio: 0.22
       mean_progress_delta_eval: 0.16
-      constraint_violation_rate_eval: -0.18
-      late_stage_targeted_action_rate: 0.1
+      constraint_violation_rate_eval: -0.26
+      invalid_action_rate_eval: -0.18
+      late_stage_targeted_action_rate: 0.12
 reward_weights:
   delta_power: 0.2
   delta_comm: 0.2
