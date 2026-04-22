@@ -1017,10 +1017,11 @@ def _round_delta_summary(candidate_metrics: dict[str, Any], reference_metrics: d
 def _resolve_candidate_styles(cfg: dict[str, Any]) -> list[str]:
     styles = cfg.get("selection", {}).get("candidate_search_styles", [])
     if isinstance(styles, list):
-        out = [str(x).strip() for x in styles if str(x).strip()]
+        allowed = {"conservative_safety_first", "balanced"}
+        out = [str(x).strip() for x in styles if str(x).strip() in allowed]
         if out:
             return out
-    return ["conservative_safety_first", "balanced", "aggressive_recovery_first"]
+    return ["conservative_safety_first", "balanced"]
 
 
 def _style_guidance(style: str) -> dict[str, Any]:
@@ -1181,6 +1182,11 @@ def select_best_candidate(
     previous_best: dict[str, Any] | None = None,
     stability_cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    fallback_origins = {"deterministic_safe_anchor", "deterministic_safe_backstop", "previous_round_best"}
+
+    def _is_generated_candidate(c: dict[str, Any]) -> bool:
+        return str(c.get("candidate_origin", "generated")) not in fallback_origins
+
     accepted: list[dict[str, Any]] = []
     safe_candidates_all: list[dict[str, Any]] = []
     rejected_ids: list[str] = []
@@ -1281,7 +1287,10 @@ def select_best_candidate(
 
     strict_safety_preference_applied = False
     selected_candidate_is_strict_safe = False
-    if accepted:
+    accepted_generated = [c for c in accepted if _is_generated_candidate(c)]
+    if accepted_generated:
+        pool = accepted_generated
+    elif accepted:
         pool = accepted
     else:
         safe_fallback_pool = [
@@ -1293,19 +1302,7 @@ def select_best_candidate(
         ]
         if safe_fallback_pool:
             strict_safety_preference_applied = True
-            prev_meets_floor = bool(
-                previous_best
-                and isinstance(previous_best.get("metrics"), dict)
-                and _safe_float(previous_best.get("metrics", {}).get("min_recovery_ratio", 0.0)) + recovery_floor_gate_epsilon >= recovery_floor_target
-            )
-            fallback_has_floor_meeting = any(
-                _safe_float(c.get("metrics", {}).get("min_recovery_ratio", 0.0)) + recovery_floor_gate_epsilon >= recovery_floor_target
-                for c in safe_fallback_pool
-            )
-            if prev_meets_floor and not fallback_has_floor_meeting:
-                pool = [previous_best]
-            else:
-                pool = safe_fallback_pool
+            pool = safe_fallback_pool
         elif previous_best and isinstance(previous_best.get("metrics"), dict):
             pool = [previous_best]
         else:
@@ -1334,23 +1331,18 @@ def select_best_candidate(
         recovery_adjusted_scores[cid] = recovery_adjusted
 
     all_zero_success = all(_safe_float(c.get("metrics", {}).get("success_rate", 0.0)) <= 0.0 for c in pool)
-    if all_zero_success:
-        def zero_success_rank_key(c: dict[str, Any]) -> tuple[float, float, float, float, float, float, float]:
-            m = c.get("metrics", {})
-            min_recovery = _safe_float(m.get("min_recovery_ratio", 0.0))
-            stage_close = _safe_float(m.get("mean_stage_indicator_eval", 0.0))
-            critical = _safe_float(m.get("critical_load_recovery_ratio", 0.0))
-            prog = _safe_float(m.get("mean_progress_delta_eval", m.get("mean_progress_delta", 0.0)))
-            material = _safe_float(m.get("material_stock_end_mean", m.get("material_stock_mean_end", 0.0)))
-            wait_usage = _safe_float(m.get("wait_hold_usage_eval", m.get("wait_hold_usage", 0.0)))
-            violation = _safe_float(m.get("constraint_violation_rate_eval", 1.0), default=1.0)
-            floor_ok = 1.0 if min_recovery >= recovery_floor_target else 0.0
-            return (floor_ok, min_recovery, stage_close, critical, prog, material, -wait_usage, -violation)
-        best_candidate = sorted(pool, key=zero_success_rank_key, reverse=True)[0]
-        best_metrics = best_candidate["metrics"]
-    else:
-        best_metrics = select_best([c["metrics"] for c in pool], "recovery_adjusted_selection_score", higher_is_better)
-        best_candidate = next(c for c in pool if c["metrics"] is best_metrics)
+
+    def _candidate_rank_key(c: dict[str, Any]) -> tuple[float, float, float, float, float]:
+        m = c.get("metrics", {})
+        success = _safe_float(m.get("success_rate", 0.0))
+        min_recovery = _safe_float(m.get("min_recovery_ratio", 0.0))
+        wait_usage = _safe_float(m.get("wait_hold_usage_eval", m.get("wait_hold_usage", 0.0)))
+        adjusted = _safe_float(m.get("recovery_adjusted_selection_score", m.get("selection_score", 0.0)))
+        raw_score = _safe_float(m.get("selection_score", 0.0))
+        return (success, min_recovery, -wait_usage, adjusted, raw_score)
+
+    best_candidate = sorted(pool, key=_candidate_rank_key, reverse=True)[0]
+    best_metrics = best_candidate["metrics"]
 
     best_violation = _safe_float(best_candidate.get("metrics", {}).get("constraint_violation_rate_eval", 1.0), default=1.0)
     best_invalid = _safe_float(
@@ -1401,16 +1393,16 @@ def select_best_candidate(
         )
         if tiny_or_small_gain and safety_regression and not meaningful_gain:
             stability_guard_triggered = True
-            selected_from_previous_round = True
             stability_rejection_reason = "small_gain_with_safety_or_smoothness_regression"
-            best_candidate = previous_best
-            best_candidate.setdefault("metrics", {})
-            best_candidate["metrics"]["stability_adjusted_selection_score"] = _safe_float(
-                best_candidate["metrics"].get("stability_adjusted_selection_score", best_candidate["metrics"].get("selection_score", 0.0))
-            )
+            if best_by_stability is not best_candidate:
+                best_candidate = best_by_stability
+                round_delta = _round_delta_summary(best_candidate.get("metrics", {}), reference_metrics)
         elif best_by_stability is not best_candidate:
             best_candidate = best_by_stability
             round_delta = _round_delta_summary(best_candidate.get("metrics", {}), reference_metrics)
+    generated_candidate_count = int(sum(1 for c in round_candidates if _is_generated_candidate(c)))
+    selected_candidate_generated = bool(_is_generated_candidate(best_candidate))
+    fallback_used = not selected_candidate_generated
     return {
         "best_candidate": best_candidate,
         "selection_diagnostics": {
@@ -1436,6 +1428,9 @@ def select_best_candidate(
             "strict_safety_preference_applied": strict_safety_preference_applied,
             "selected_candidate_is_strict_safe": selected_candidate_is_strict_safe,
             "selected_candidate_origin": str(best_candidate.get("candidate_origin", "")),
+            "generated_candidate_count": generated_candidate_count,
+            "selected_candidate_is_generated": selected_candidate_generated,
+            "fallback_used": fallback_used,
             "round_delta_summary": round_delta,
             "stability_thresholds": {
                 "small_score_gain_max": small_gain_max,
@@ -1863,6 +1858,7 @@ def main() -> None:
 
             record = {
                 "candidate_id": cid,
+                "candidate_origin": "generated",
                 "validation": report,
                 "candidate": report["normalized_payload"],
                 "search_style": style_name,
@@ -2352,6 +2348,9 @@ def main() -> None:
             "best_candidate_id": str(best_candidate.get("candidate_id", "")),
             "best_candidate_path": str(best_candidate.get("candidate_path", "")),
             "best_candidate_search_style": str(best_candidate.get("search_style", "")),
+            "generated_candidate_count": int(selection_diagnostics.get("generated_candidate_count", 0)),
+            "fallback_used": bool(selection_diagnostics.get("fallback_used", False)),
+            "winner_type": "generated" if bool(selection_diagnostics.get("selected_candidate_is_generated", False)) else "fallback",
             "candidate_styles_explored": [str(c.get("search_style", "")) for c in round_candidates],
             "success_rate": float(best_candidate["metrics"].get("success_rate", 0.0)),
             "communication_recovery_ratio": float(best_candidate["metrics"].get("communication_recovery_ratio", 0.0)),
@@ -2441,6 +2440,9 @@ def main() -> None:
             {
                 "rounds": history,
                 "selection_diagnostics": final_selection_diag,
+                "final_winner_type": "generated" if bool(final_selection_diag.get("selected_candidate_is_generated", False)) else "fallback",
+                "final_fallback_used": bool(final_selection_diag.get("fallback_used", False)),
+                "final_generated_candidate_count": int(final_selection_diag.get("generated_candidate_count", 0)),
                 "llm_audit": llm_audit,
                 "llm_effective_mode": client.effective_mode(),
                 "router_mode": args.router_mode,
