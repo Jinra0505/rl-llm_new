@@ -1,0 +1,179 @@
+{
+  "split_name": "benchmark_eval_presets",
+  "eval_budget": "completion_budget_eval",
+  "seeds": [
+    42,
+    43,
+    44
+  ],
+  "modes": {
+    "baseline_rl": {
+      "avg_selection_score": 0.4106497732987551,
+      "avg_min_recovery_ratio": 0.6225333246919843,
+      "avg_invalid_action_rate_eval": 0.20458602728889186,
+      "avg_constraint_violation_rate_eval": 0.20458602728889186,
+      "runs": [
+        {
+          "seed": 42,
+          "selection_score": 0.3962525875730108,
+          "min_recovery_ratio": 0.6336177488168081,
+          "invalid_action_rate_eval": 0.22093023255813954,
+          "constraint_violation_rate_eval": 0.22093023255813954,
+          "revise_module_path": "baseline_noop.py"
+        },
+        {
+          "seed": 43,
+          "selection_score": 0.42101904867318546,
+          "min_recovery_ratio": 0.6169911126295725,
+          "invalid_action_rate_eval": 0.19111111111111112,
+          "constraint_violation_rate_eval": 0.19111111111111112,
+          "revise_module_path": "baseline_noop.py"
+        },
+        {
+          "seed": 44,
+          "selection_score": 0.4146776836500692,
+          "min_recovery_ratio": 0.6169911126295725,
+          "invalid_action_rate_eval": 0.2017167381974249,
+          "constraint_violation_rate_eval": 0.2017167381974249,
+          "revise_module_path": "baseline_noop.py"
+        }
+      ]
+    },
+    "single_shot_llm": {
+      "avg_selection_score": -666666666.5485804,
+      "avg_min_recovery_ratio": 0.21847021579742432,
+      "avg_invalid_action_rate_eval": 0.1542056074766355,
+      "avg_constraint_violation_rate_eval": 0.1542056074766355,
+      "runs": [
+        {
+          "seed": 42,
+          "selection_score": -1000000000.0,
+          "min_recovery_ratio": null,
+          "invalid_action_rate_eval": null,
+          "constraint_violation_rate_eval": null,
+          "revise_module_path": null
+        },
+        {
+          "seed": 43,
+          "selection_score": 0.35425882264256164,
+          "min_recovery_ratio": 0.655410647392273,
+          "invalid_action_rate_eval": 0.46261682242990654,
+          "constraint_violation_rate_eval": 0.46261682242990654,
+          "revise_module_path": "generated/shaping_critical_load_priority_middle_conservative.json.py"
+        },
+        {
+          "seed": 44,
+          "selection_score": -1000000000.0,
+          "min_recovery_ratio": null,
+          "invalid_action_rate_eval": null,
+          "constraint_violation_rate_eval": null,
+          "revise_module_path": null
+        }
+      ]
+    },
+    "full_outer_loop": {
+      "avg_selection_score": 0.36346711978660307,
+      "avg_min_recovery_ratio": 0.6037911805841657,
+      "avg_invalid_action_rate_eval": 0.23636337063149648,
+      "avg_constraint_violation_rate_eval": 0.23636337063149648,
+      "runs": [
+        {
+          "seed": 42,
+          "selection_score": 0.2880391611059507,
+          "min_recovery_ratio": 0.6169911126295725,
+          "invalid_action_rate_eval": 0.21666666666666667,
+          "constraint_violation_rate_eval": 0.21666666666666667,
+          "revise_module_path": "generated/shaping_critical_load_priority_middle_balanced.json.py"
+        },
+        {
+          "seed": 43,
+          "selection_score": 0.412476918661703,
+          "min_recovery_ratio": 0.5607868532339731,
+          "invalid_action_rate_eval": 0.27149321266968324,
+          "constraint_violation_rate_eval": 0.27149321266968324,
+          "revise_module_path": "generated/shaping_global_efficiency_priority_middle_conservative.json.py"
+        },
+        {
+          "seed": 44,
+          "selection_score": 0.3898852795921555,
+          "min_recovery_ratio": 0.6335955758889517,
+          "invalid_action_rate_eval": 0.22093023255813954,
+          "constraint_violation_rate_eval": 0.22093023255813954,
+          "revise_module_path": "generated/balanced_critical_load_priority_middle.py"
+        }
+      ]
+    }
+  },
+  "full_outer_loop_details": [
+    {
+      "seed": 42,
+      "revise_module_path": "generated/shaping_critical_load_priority_middle_balanced.json.py",
+      "winner_source": "llm_generated",
+      "phase_contract_used": {
+        "phase_mode": "late_finish",
+        "phase_duration": 12,
+        "resource_floor_target": 0.15,
+        "completion_push_allowed": true,
+        "late_stage_trigger": 0.7
+      },
+      "invalid_action_rate_eval": 0.21666666666666667,
+      "constraint_violation_rate_eval": 0.21666666666666667,
+      "min_recovery_ratio": 0.6169911126295725,
+      "selection_score": 0.2880391611059507
+    },
+    {
+      "seed": 43,
+      "revise_module_path": "generated/shaping_global_efficiency_priority_middle_conservative.json.py",
+      "winner_source": "llm_generated",
+      "phase_contract_used": {
+        "phase_mode": "late_finish",
+        "phase_duration": 12,
+        "resource_floor_target": 0.15,
+        "completion_push_allowed": true,
+        "late_stage_trigger": 0.65
+      },
+      "invalid_action_rate_eval": 0.27149321266968324,
+      "constraint_violation_rate_eval": 0.27149321266968324,
+      "min_recovery_ratio": 0.5607868532339731,
+      "selection_score": 0.412476918661703
+    },
+    {
+      "seed": 44,
+      "revise_module_path": "generated/balanced_critical_load_priority_middle.py",
+      "winner_source": "llm_generated",
+      "phase_contract_used": {
+        "phase_mode": "late_finish",
+        "phase_duration": 12,
+        "resource_floor_target": 0.15,
+        "completion_push_allowed": true,
+        "late_stage_trigger": 0.7
+      },
+      "invalid_action_rate_eval": 0.22093023255813954,
+      "constraint_violation_rate_eval": 0.22093023255813954,
+      "min_recovery_ratio": 0.6335955758889517,
+      "selection_score": 0.3898852795921555
+    }
+  ],
+  "comparison_vs_previous_current_version": {
+    "selection_score": {
+      "previous_avg": 0.40245188633380113,
+      "current_avg": 0.36346711978660307
+    },
+    "min_recovery_ratio": {
+      "previous_avg": 0.6503631704383426,
+      "current_avg": 0.6037911805841657
+    },
+    "invalid_action_rate_eval": {
+      "previous_avg": 0.0,
+      "current_avg": 0.23636337063149648
+    },
+    "constraint_violation_rate_eval": {
+      "previous_avg": 0.0,
+      "current_avg": 0.23636337063149648
+    },
+    "non_noop_winners_count": {
+      "previous": 1,
+      "current": 3
+    }
+  }
+}
