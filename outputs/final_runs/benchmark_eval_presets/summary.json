@@ -1,0 +1,86 @@
+{
+  "baseline_rl": {
+    "selection_score": {
+      "mean": 0.3628068070747574,
+      "std": 0.08346482934925356
+    },
+    "min_recovery_ratio": {
+      "mean": 0.5728520866897372,
+      "std": 0.018601335799963394
+    },
+    "constraint_violation_rate_eval": {
+      "mean": 0.05416666666666667,
+      "std": 0.07660323462854265
+    },
+    "invalid_action_rate_eval": {
+      "mean": 0.05416666666666667,
+      "std": 0.07660323462854265
+    },
+    "lipschitz_mean": {
+      "mean": 84.2906265258789,
+      "std": 16.324198423919178
+    },
+    "wait_hold_usage_eval": {
+      "mean": 0.23295454545454544,
+      "std": 0.0754773858984468
+    },
+    "completed": 3,
+    "failed": 0
+  },
+  "single_shot_llm": {
+    "selection_score": {
+      "mean": 0.45130931309544803,
+      "std": 0.05218703015243198
+    },
+    "min_recovery_ratio": {
+      "mean": 0.5928403900729285,
+      "std": 0.051157376424206355
+    },
+    "constraint_violation_rate_eval": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "invalid_action_rate_eval": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "lipschitz_mean": {
+      "mean": 124.56197611490886,
+      "std": 22.879363930480547
+    },
+    "wait_hold_usage_eval": {
+      "mean": 0.1900534334186865,
+      "std": 0.017342429416706204
+    },
+    "completed": 3,
+    "failed": 0
+  },
+  "full_outer_loop": {
+    "selection_score": {
+      "mean": 0.40245188633380113,
+      "std": 0.06249886241866282
+    },
+    "min_recovery_ratio": {
+      "mean": 0.6503631704383426,
+      "std": 0.014845065613100039
+    },
+    "constraint_violation_rate_eval": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "invalid_action_rate_eval": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "lipschitz_mean": {
+      "mean": 277.1151428222656,
+      "std": 167.3584790117699
+    },
+    "wait_hold_usage_eval": {
+      "mean": 0.1797782874617737,
+      "std": 0.01568884212418331
+    },
+    "completed": 3,
+    "failed": 0
+  }
+}
