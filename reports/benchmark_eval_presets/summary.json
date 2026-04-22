@@ -1,86 +1,179 @@
 {
-  "baseline_rl": {
-    "selection_score": {
-      "mean": 0.4106497732987551,
-      "std": 0.010504362433620401
+  "split_name": "benchmark_eval_presets",
+  "eval_budget": "completion_budget_eval",
+  "seeds": [
+    42,
+    43,
+    44
+  ],
+  "modes": {
+    "baseline_rl": {
+      "avg_selection_score": 0.4106497732987551,
+      "avg_min_recovery_ratio": 0.6225333246919843,
+      "avg_invalid_action_rate_eval": 0.20458602728889186,
+      "avg_constraint_violation_rate_eval": 0.20458602728889186,
+      "runs": [
+        {
+          "seed": 42,
+          "selection_score": 0.3962525875730108,
+          "min_recovery_ratio": 0.6336177488168081,
+          "invalid_action_rate_eval": 0.22093023255813954,
+          "constraint_violation_rate_eval": 0.22093023255813954,
+          "revise_module_path": "baseline_noop.py"
+        },
+        {
+          "seed": 43,
+          "selection_score": 0.42101904867318546,
+          "min_recovery_ratio": 0.6169911126295725,
+          "invalid_action_rate_eval": 0.19111111111111112,
+          "constraint_violation_rate_eval": 0.19111111111111112,
+          "revise_module_path": "baseline_noop.py"
+        },
+        {
+          "seed": 44,
+          "selection_score": 0.4146776836500692,
+          "min_recovery_ratio": 0.6169911126295725,
+          "invalid_action_rate_eval": 0.2017167381974249,
+          "constraint_violation_rate_eval": 0.2017167381974249,
+          "revise_module_path": "baseline_noop.py"
+        }
+      ]
     },
-    "min_recovery_ratio": {
-      "mean": 0.6225333246919843,
-      "std": 0.00783787146421062
+    "single_shot_llm": {
+      "avg_selection_score": -666666666.5485804,
+      "avg_min_recovery_ratio": 0.21847021579742432,
+      "avg_invalid_action_rate_eval": 0.1542056074766355,
+      "avg_constraint_violation_rate_eval": 0.1542056074766355,
+      "runs": [
+        {
+          "seed": 42,
+          "selection_score": -1000000000.0,
+          "min_recovery_ratio": null,
+          "invalid_action_rate_eval": null,
+          "constraint_violation_rate_eval": null,
+          "revise_module_path": null
+        },
+        {
+          "seed": 43,
+          "selection_score": 0.35425882264256164,
+          "min_recovery_ratio": 0.655410647392273,
+          "invalid_action_rate_eval": 0.46261682242990654,
+          "constraint_violation_rate_eval": 0.46261682242990654,
+          "revise_module_path": "generated/shaping_critical_load_priority_middle_conservative.json.py"
+        },
+        {
+          "seed": 44,
+          "selection_score": -1000000000.0,
+          "min_recovery_ratio": null,
+          "invalid_action_rate_eval": null,
+          "constraint_violation_rate_eval": null,
+          "revise_module_path": null
+        }
+      ]
     },
-    "constraint_violation_rate_eval": {
-      "mean": 0.20458602728889186,
-      "std": 0.012341518434022236
-    },
-    "invalid_action_rate_eval": {
-      "mean": 0.20458602728889186,
-      "std": 0.012341518434022236
-    },
-    "lipschitz_mean": {
-      "mean": 489.5223795572917,
-      "std": 34.717598237575764
-    },
-    "wait_hold_usage_eval": {
-      "mean": 0.18084299090986386,
-      "std": 0.012247255734805241
-    },
-    "completed": 3,
-    "failed": 0
+    "full_outer_loop": {
+      "avg_selection_score": 0.36346711978660307,
+      "avg_min_recovery_ratio": 0.6037911805841657,
+      "avg_invalid_action_rate_eval": 0.23636337063149648,
+      "avg_constraint_violation_rate_eval": 0.23636337063149648,
+      "runs": [
+        {
+          "seed": 42,
+          "selection_score": 0.2880391611059507,
+          "min_recovery_ratio": 0.6169911126295725,
+          "invalid_action_rate_eval": 0.21666666666666667,
+          "constraint_violation_rate_eval": 0.21666666666666667,
+          "revise_module_path": "generated/shaping_critical_load_priority_middle_balanced.json.py"
+        },
+        {
+          "seed": 43,
+          "selection_score": 0.412476918661703,
+          "min_recovery_ratio": 0.5607868532339731,
+          "invalid_action_rate_eval": 0.27149321266968324,
+          "constraint_violation_rate_eval": 0.27149321266968324,
+          "revise_module_path": "generated/shaping_global_efficiency_priority_middle_conservative.json.py"
+        },
+        {
+          "seed": 44,
+          "selection_score": 0.3898852795921555,
+          "min_recovery_ratio": 0.6335955758889517,
+          "invalid_action_rate_eval": 0.22093023255813954,
+          "constraint_violation_rate_eval": 0.22093023255813954,
+          "revise_module_path": "generated/balanced_critical_load_priority_middle.py"
+        }
+      ]
+    }
   },
-  "single_shot_llm": {
+  "full_outer_loop_details": [
+    {
+      "seed": 42,
+      "revise_module_path": "generated/shaping_critical_load_priority_middle_balanced.json.py",
+      "winner_source": "llm_generated",
+      "phase_contract_used": {
+        "phase_mode": "late_finish",
+        "phase_duration": 12,
+        "resource_floor_target": 0.15,
+        "completion_push_allowed": true,
+        "late_stage_trigger": 0.7
+      },
+      "invalid_action_rate_eval": 0.21666666666666667,
+      "constraint_violation_rate_eval": 0.21666666666666667,
+      "min_recovery_ratio": 0.6169911126295725,
+      "selection_score": 0.2880391611059507
+    },
+    {
+      "seed": 43,
+      "revise_module_path": "generated/shaping_global_efficiency_priority_middle_conservative.json.py",
+      "winner_source": "llm_generated",
+      "phase_contract_used": {
+        "phase_mode": "late_finish",
+        "phase_duration": 12,
+        "resource_floor_target": 0.15,
+        "completion_push_allowed": true,
+        "late_stage_trigger": 0.65
+      },
+      "invalid_action_rate_eval": 0.27149321266968324,
+      "constraint_violation_rate_eval": 0.27149321266968324,
+      "min_recovery_ratio": 0.5607868532339731,
+      "selection_score": 0.412476918661703
+    },
+    {
+      "seed": 44,
+      "revise_module_path": "generated/balanced_critical_load_priority_middle.py",
+      "winner_source": "llm_generated",
+      "phase_contract_used": {
+        "phase_mode": "late_finish",
+        "phase_duration": 12,
+        "resource_floor_target": 0.15,
+        "completion_push_allowed": true,
+        "late_stage_trigger": 0.7
+      },
+      "invalid_action_rate_eval": 0.22093023255813954,
+      "constraint_violation_rate_eval": 0.22093023255813954,
+      "min_recovery_ratio": 0.6335955758889517,
+      "selection_score": 0.3898852795921555
+    }
+  ],
+  "comparison_vs_previous_current_version": {
     "selection_score": {
-      "mean": 0.39270858372635936,
-      "std": 0.020402052895130113
+      "previous_avg": 0.40245188633380113,
+      "current_avg": 0.36346711978660307
     },
     "min_recovery_ratio": {
-      "mean": 0.6326128310627408,
-      "std": 0.04013631792294138
-    },
-    "constraint_violation_rate_eval": {
-      "mean": 0.31241724990802355,
-      "std": 0.07044787538929362
+      "previous_avg": 0.6503631704383426,
+      "current_avg": 0.6037911805841657
     },
     "invalid_action_rate_eval": {
-      "mean": 0.31241724990802355,
-      "std": 0.07044787538929362
-    },
-    "lipschitz_mean": {
-      "mean": 455.9090576171875,
-      "std": 110.55528113293889
-    },
-    "wait_hold_usage_eval": {
-      "mean": 0.11631505265631481,
-      "std": 0.03769145869768015
-    },
-    "completed": 3,
-    "failed": 0
-  },
-  "full_outer_loop": {
-    "selection_score": {
-      "mean": 0.375677290298064,
-      "std": 0.008910080226648123
-    },
-    "min_recovery_ratio": {
-      "mean": 0.6311091995901532,
-      "std": 0.04164820276153768
+      "previous_avg": 0.0,
+      "current_avg": 0.23636337063149648
     },
     "constraint_violation_rate_eval": {
-      "mean": 0.23290654654410922,
-      "std": 0.17133629479938406
+      "previous_avg": 0.0,
+      "current_avg": 0.23636337063149648
     },
-    "invalid_action_rate_eval": {
-      "mean": 0.23290654654410922,
-      "std": 0.17133629479938406
-    },
-    "lipschitz_mean": {
-      "mean": 489.7800801595052,
-      "std": 125.8769098956297
-    },
-    "wait_hold_usage_eval": {
-      "mean": 0.13294349302328726,
-      "std": 0.051788176705384985
-    },
-    "completed": 3,
-    "failed": 0
+    "non_noop_winners_count": {
+      "previous": 1,
+      "current": 3
+    }
   }
 }

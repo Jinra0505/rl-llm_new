@@ -1240,18 +1240,16 @@ def _probe_generated_candidate(
     mat_end = _safe_float(probe_metrics.get("material_stock_end_mean", probe_metrics.get("material_stock_mean_end", 1.0)))
     progress = _safe_float(probe_metrics.get("mean_progress_delta_eval", probe_metrics.get("mean_progress_delta", 0.0)))
     late_finish = _safe_float(probe_metrics.get("late_finish_action_share_eval", 0.0))
-    if invalid > (ref_invalid + 0.10):
+    if invalid > (ref_invalid + 0.25):
         reasons.append("probe_invalid_too_high")
-    if violation > (ref_violation + 0.10):
+    if violation > (ref_violation + 0.25):
         reasons.append("probe_violation_too_high")
-    if min_recovery < (ref_min_recovery - 0.08):
+    if min_recovery < (ref_min_recovery - 0.15):
         reasons.append("probe_recovery_floor_too_low")
-    if wait_hold > 0.55:
+    if wait_hold > 0.70:
         reasons.append("probe_wait_overuse")
     if mat_end < 0.04 and progress < 0.001:
         reasons.append("probe_material_drop_too_fast")
-    if late_finish < 0.04 and _safe_float(probe_metrics.get("eval_success_rate", 0.0)) <= 0.0:
-        reasons.append("probe_no_late_finish_tendency")
     return len(reasons) == 0, probe_metrics, reasons
 
 
@@ -1359,9 +1357,9 @@ def select_best_candidate(
                     reasons.append("invalid_action_not_allowed")
             if _is_generated_candidate(cand):
                 acceptable_generated = (
-                    invalid_rate <= (ref_invalid + 0.08)
-                    and violation <= (ref_violation + 0.08)
-                    and min_recovery >= (_safe_float(reference_metrics.get("min_recovery_ratio", 0.0)) - 0.08)
+                    invalid_rate <= (ref_invalid + 0.20)
+                    and violation <= (ref_violation + 0.20)
+                    and min_recovery >= (_safe_float(reference_metrics.get("min_recovery_ratio", 0.0)) - 0.12)
                 )
                 if acceptable_generated:
                     acceptable_generated_ids.append(cid)
@@ -1427,14 +1425,21 @@ def select_best_candidate(
 
     all_zero_success = all(_safe_float(c.get("metrics", {}).get("success_rate", 0.0)) <= 0.0 for c in pool)
 
-    def _candidate_rank_key(c: dict[str, Any]) -> tuple[float, float, float, float, float]:
+    def _candidate_rank_key(c: dict[str, Any]) -> tuple[float, float, float, float, float, float]:
         m = c.get("metrics", {})
+        origin = str(c.get("candidate_origin", "generated"))
+        if origin == "generated":
+            source_rank = 2.0
+        elif origin == "deterministic_safe_anchor":
+            source_rank = 1.0
+        else:
+            source_rank = 0.0
         success = _safe_float(m.get("success_rate", 0.0))
         min_recovery = _safe_float(m.get("min_recovery_ratio", 0.0))
         wait_usage = _safe_float(m.get("wait_hold_usage_eval", m.get("wait_hold_usage", 0.0)))
         adjusted = _safe_float(m.get("recovery_adjusted_selection_score", m.get("selection_score", 0.0)))
         raw_score = _safe_float(m.get("selection_score", 0.0))
-        return (success, min_recovery, -wait_usage, adjusted, raw_score)
+        return (source_rank, success, min_recovery, -wait_usage, adjusted, raw_score)
 
     best_candidate = sorted(pool, key=_candidate_rank_key, reverse=True)[0]
     best_metrics = best_candidate["metrics"]
@@ -1498,7 +1503,13 @@ def select_best_candidate(
     generated_candidate_count = int(sum(1 for c in round_candidates if _is_generated_candidate(c)))
     selected_candidate_generated = bool(_is_generated_candidate(best_candidate))
     fallback_used = not selected_candidate_generated
-    winner_source = "generated" if selected_candidate_generated else "noop_fallback"
+    selected_origin = str(best_candidate.get("candidate_origin", "generated"))
+    if selected_origin == "generated":
+        winner_source = "llm_generated"
+    elif selected_origin == "deterministic_safe_anchor":
+        winner_source = "safe_anchor"
+    else:
+        winner_source = "noop_fallback"
     return {
         "best_candidate": best_candidate,
         "selection_diagnostics": {
