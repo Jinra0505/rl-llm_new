@@ -151,21 +151,21 @@ def normalize_phase_contract(raw: dict[str, Any] | None) -> dict[str, Any]:
     if phase_mode not in allowed_modes:
         phase_mode = "balanced_progress"
     try:
-        phase_duration = int(raw.get("phase_duration", 8))
+        phase_duration = int(raw.get("phase_duration", 10))
     except (TypeError, ValueError):
-        phase_duration = 8
-    phase_duration = max(2, min(80, phase_duration))
+        phase_duration = 10
+    phase_duration = max(8, min(12, phase_duration))
     try:
-        resource_floor_target = float(raw.get("resource_floor_target", 0.12))
+        resource_floor_target = float(raw.get("resource_floor_target", 0.13))
     except (TypeError, ValueError):
-        resource_floor_target = 0.12
-    resource_floor_target = max(0.05, min(0.40, resource_floor_target))
+        resource_floor_target = 0.13
+    resource_floor_target = max(0.12, min(0.15, resource_floor_target))
     completion_push_allowed = bool(raw.get("completion_push_allowed", True))
     try:
-        late_stage_trigger = float(raw.get("late_stage_trigger", 0.72))
+        late_stage_trigger = float(raw.get("late_stage_trigger", 0.68))
     except (TypeError, ValueError):
-        late_stage_trigger = 0.72
-    late_stage_trigger = max(0.50, min(0.95, late_stage_trigger))
+        late_stage_trigger = 0.68
+    late_stage_trigger = max(0.65, min(0.70, late_stage_trigger))
     return {
         "phase_mode": phase_mode,
         "phase_duration": phase_duration,
