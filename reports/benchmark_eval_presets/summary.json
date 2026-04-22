@@ -1,0 +1,86 @@
+{
+  "baseline_rl": {
+    "selection_score": {
+      "mean": 0.4106497732987551,
+      "std": 0.010504362433620401
+    },
+    "min_recovery_ratio": {
+      "mean": 0.6225333246919843,
+      "std": 0.00783787146421062
+    },
+    "constraint_violation_rate_eval": {
+      "mean": 0.20458602728889186,
+      "std": 0.012341518434022236
+    },
+    "invalid_action_rate_eval": {
+      "mean": 0.20458602728889186,
+      "std": 0.012341518434022236
+    },
+    "lipschitz_mean": {
+      "mean": 489.5223795572917,
+      "std": 34.717598237575764
+    },
+    "wait_hold_usage_eval": {
+      "mean": 0.18084299090986386,
+      "std": 0.012247255734805241
+    },
+    "completed": 3,
+    "failed": 0
+  },
+  "single_shot_llm": {
+    "selection_score": {
+      "mean": 0.39270858372635936,
+      "std": 0.020402052895130113
+    },
+    "min_recovery_ratio": {
+      "mean": 0.6326128310627408,
+      "std": 0.04013631792294138
+    },
+    "constraint_violation_rate_eval": {
+      "mean": 0.31241724990802355,
+      "std": 0.07044787538929362
+    },
+    "invalid_action_rate_eval": {
+      "mean": 0.31241724990802355,
+      "std": 0.07044787538929362
+    },
+    "lipschitz_mean": {
+      "mean": 455.9090576171875,
+      "std": 110.55528113293889
+    },
+    "wait_hold_usage_eval": {
+      "mean": 0.11631505265631481,
+      "std": 0.03769145869768015
+    },
+    "completed": 3,
+    "failed": 0
+  },
+  "full_outer_loop": {
+    "selection_score": {
+      "mean": 0.375677290298064,
+      "std": 0.008910080226648123
+    },
+    "min_recovery_ratio": {
+      "mean": 0.6311091995901532,
+      "std": 0.04164820276153768
+    },
+    "constraint_violation_rate_eval": {
+      "mean": 0.23290654654410922,
+      "std": 0.17133629479938406
+    },
+    "invalid_action_rate_eval": {
+      "mean": 0.23290654654410922,
+      "std": 0.17133629479938406
+    },
+    "lipschitz_mean": {
+      "mean": 489.7800801595052,
+      "std": 125.8769098956297
+    },
+    "wait_hold_usage_eval": {
+      "mean": 0.13294349302328726,
+      "std": 0.051788176705384985
+    },
+    "completed": 3,
+    "failed": 0
+  }
+}
