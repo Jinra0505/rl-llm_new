@@ -1,0 +1,60 @@
+llm:
+  base_url: https://api.deepseek.com
+  model_chat: deepseek-chat
+  model_reasoner: deepseek-reasoner
+  timeout_seconds: 60
+  max_retries: 2
+  temperature: 0.3
+  max_tokens: 1800
+outer_loop:
+  rounds: 3
+  candidates_per_round: 2
+env:
+  name: project_recovery
+  max_steps: 30
+scenario:
+  severity: moderate
+benchmark:
+  enabled: true
+  mode: suite
+  split_name: benchmark_eval_presets
+  preset_group: ''
+  preset_name: ''
+  preset_jitter: 0.0
+  fixed_severity: moderate
+evaluation:
+  fixed_budget:
+    enabled: true
+    max_steps: 15
+  completion_budget:
+    enabled: true
+    max_steps: 40
+training:
+  train_episodes: 20
+  eval_episodes: 6
+  gamma: 0.98
+  batch_size: 64
+  replay_size: 30000
+  min_replay_size: 500
+  train_freq: 1
+  target_update_interval: 250
+  learning_rate: 0.0008
+  hidden_dim: 128
+  epsilon_start: 1.0
+  epsilon_end: 0.05
+  epsilon_decay_steps: 12000
+  reward_mode: engineered
+selection:
+  higher_is_better: true
+  task_mode_metric_weights: {}
+  stability:
+    max_violation_regression: 0.003
+    max_invalid_regression: 0.003
+    max_wait_usage_regression: 0.06
+    recovery_floor_baseline: 0.62
+    recovery_floor_penalty_weight: 3.0
+paths:
+  generated_dir: generated
+  outputs_dir: outputs/benchmark_eval/full_outer_loop
+  formal_baseline_result: outputs/exp1_baseline_realcheck_v4.json
+  formal_outer_loop_dir: outputs/real_outer_loop_v4

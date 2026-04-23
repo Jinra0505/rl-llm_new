@@ -1561,7 +1561,11 @@ def main() -> None:
     parser.add_argument("--env", default="project_recovery")
     parser.add_argument("--llm-mode", choices=["real"], default="real")
     parser.add_argument("--router-mode", choices=["llm"], default="llm")
-    parser.add_argument("--fixed-task-mode", default="")
+    parser.add_argument(
+        "--fixed-task-mode",
+        choices=["", "critical_load_priority", "restoration_capability_priority", "global_efficiency_priority"],
+        default="",
+    )
     parser.add_argument("--reroute-each-round", action="store_true")
     parser.add_argument("--rounds-override", type=int, default=0)
     parser.add_argument("--candidates-override", type=int, default=0)
@@ -1577,9 +1581,6 @@ def main() -> None:
         raise RuntimeError("Formal run requires llm_mode=real.")
     if args.router_mode != "llm":
         raise RuntimeError("Formal run requires router_mode=llm.")
-    if args.fixed_task_mode:
-        raise RuntimeError("Formal run does not allow fixed-task-mode override.")
-
     cfg = load_yaml(Path(args.config))
     planning_mode = str(args.planning_mode or cfg.get("planning", {}).get("mode", "standard_planning")).strip()
     if planning_mode not in {"standard_planning", "compact_planning"}:
@@ -1677,38 +1678,50 @@ def main() -> None:
 
         previous_task = str(history[-1].get("selected_task", "")) if history else ""
         previous_round_failed = bool(float(prev_metrics.get("success_rate", 0.0)) <= 0.0) if previous_best else False
-        try:
-            t0_route = time.time()
-            route = recognizer.recognize_with_llm(
-                client=client,
-                system_prompt=SYSTEM_PROMPT,
-                routing_context=routing_context,
-                previous_task=previous_task,
-                previous_round_failed=previous_round_failed,
-            )
-            route_elapsed = float(time.time() - t0_route)
-            stage_timings.append({"stage": "routing", "round": round_idx + 1, "elapsed_sec": route_elapsed})
+        route_elapsed = 0.0
+        if args.fixed_task_mode:
+            route = {
+                "task_mode": str(args.fixed_task_mode),
+                "stage": str(routing_context.get("env_summary", {}).get("stage", "middle")),
+                "reason": "fixed_task_mode_override",
+                "source": "fixed",
+            }
+            stage_timings.append({"stage": "routing", "round": round_idx + 1, "elapsed_sec": 0.0, "fixed_task_mode": str(args.fixed_task_mode)})
             (run_dir / "stage_timings.json").write_text(json.dumps(stage_timings, indent=2), encoding="utf-8")
             last_completed_stage = "routing"
-        except Exception as exc:  # noqa: BLE001
-            _write_failure_artifacts(run_dir, "router", exc, client)
-            _write_run_status(
-                run_dir,
-                started_at=started_at,
-                current_stage="routing",
-                last_completed_stage=last_completed_stage,
-                current_round=round_idx + 1,
-                failed=True,
-                extra={"error": str(exc)},
-            )
-            raise
+        else:
+            try:
+                t0_route = time.time()
+                route = recognizer.recognize_with_llm(
+                    client=client,
+                    system_prompt=SYSTEM_PROMPT,
+                    routing_context=routing_context,
+                    previous_task=previous_task,
+                    previous_round_failed=previous_round_failed,
+                )
+                route_elapsed = float(time.time() - t0_route)
+                stage_timings.append({"stage": "routing", "round": round_idx + 1, "elapsed_sec": route_elapsed})
+                (run_dir / "stage_timings.json").write_text(json.dumps(stage_timings, indent=2), encoding="utf-8")
+                last_completed_stage = "routing"
+            except Exception as exc:  # noqa: BLE001
+                _write_failure_artifacts(run_dir, "router", exc, client)
+                _write_run_status(
+                    run_dir,
+                    started_at=started_at,
+                    current_stage="routing",
+                    last_completed_stage=last_completed_stage,
+                    current_round=round_idx + 1,
+                    failed=True,
+                    extra={"error": str(exc)},
+                )
+                raise
         if route["task_mode"] not in TASK_MODE_ALLOWED:
             raise RuntimeError(f"Router returned unsupported task mode in formal run: {route['task_mode']}")
         route["task_switched_vs_prev_round"] = bool(round_idx > 0 and route.get("task_mode") != previous_task)
 
         round_dir = run_dir / f"round_{round_idx+1}"
         round_dir.mkdir(parents=True, exist_ok=True)
-        route["source"] = "llm"
+        route["source"] = "fixed" if args.fixed_task_mode else "llm"
         (round_dir / "route.json").write_text(json.dumps(route, indent=2), encoding="utf-8")
         planning_payload = build_planning_payload(
             route=route,

@@ -180,9 +180,14 @@ def run_outer_pipeline(mode: str, seed: int, reward_mode: str, split_name: str, 
     cfg_path.write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
 
     outer_cfg = cfg.get("outer_loop", {}) if isinstance(cfg.get("outer_loop"), dict) else {}
+    fixed_task_mode = ""
     if mode == "single_shot_llm":
         rounds = "1"
         candidates = "1"
+    elif mode == "ablation_fixed_global":
+        rounds = str(max(2, int(outer_cfg.get("rounds", 3))))
+        candidates = str(max(1, int(outer_cfg.get("candidates_per_round", 2))))
+        fixed_task_mode = "global_efficiency_priority"
     else:
         # Keep full outer-loop materially different from single-shot.
         rounds = "3"
@@ -207,6 +212,8 @@ def run_outer_pipeline(mode: str, seed: int, reward_mode: str, split_name: str, 
         "--config",
         str(cfg_path),
     ]
+    if fixed_task_mode:
+        cmd.extend(["--fixed-task-mode", fixed_task_mode])
     try:
         subprocess.run(cmd, check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError as exc:
@@ -252,7 +259,7 @@ def run_outer_pipeline(mode: str, seed: int, reward_mode: str, split_name: str, 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run aligned benchmark evaluation for baseline/single/full pipelines.")
-    parser.add_argument("--mode", choices=["baseline_rl", "single_shot_llm", "full_outer_loop"], required=True)
+    parser.add_argument("--mode", choices=["baseline_rl", "single_shot_llm", "full_outer_loop", "ablation_fixed_global"], required=True)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--reward-mode", choices=["clean", "engineered"], default="engineered")
     parser.add_argument("--split-name", default="benchmark_eval_presets")
