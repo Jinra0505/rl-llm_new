@@ -76,17 +76,17 @@ def _normalize_reward_controls(raw: Any) -> dict[str, float]:
     if not isinstance(raw, dict):
         raw = {}
     bounds = {
-        "critical_gain_scale": (0.6, 1.8),
-        "progress_bonus_scale": (0.6, 1.8),
-        "weak_layer_gain_scale": (0.6, 1.8),
-        "weak_zone_gain_scale": (0.6, 1.8),
-        "late_stage_bonus_scale": (0.6, 1.8),
-        "completion_bonus_scale": (0.6, 1.8),
-        "wait_penalty_scale": (0.6, 1.8),
-        "invalid_penalty_scale": (0.6, 1.8),
-        "constraint_penalty_scale": (0.6, 1.8),
-        "material_penalty_scale": (0.6, 1.8),
-        "recovery_floor_bonus_scale": (0.6, 1.8),
+        "critical_gain_scale": (0.7, 1.4),
+        "progress_bonus_scale": (0.7, 1.4),
+        "weak_layer_gain_scale": (0.7, 1.4),
+        "weak_zone_gain_scale": (0.7, 1.4),
+        "late_stage_bonus_scale": (0.7, 1.4),
+        "completion_bonus_scale": (0.7, 1.4),
+        "wait_penalty_scale": (0.7, 1.4),
+        "invalid_penalty_scale": (0.7, 1.4),
+        "constraint_penalty_scale": (0.7, 1.4),
+        "material_penalty_scale": (0.7, 1.4),
+        "recovery_floor_bonus_scale": (0.7, 1.4),
     }
     out: dict[str, float] = {}
     for k, (lo, hi) in bounds.items():
@@ -189,25 +189,44 @@ def _valid_action_mask(
             if road_ratio < 0.25:
                 mask[9 + zone_idx] = False
 
-    # Material shortage: strongly suppress material-intensive actions.
-    if material < 0.15:
+    weak_zone = str(info.get("weakest_zone", "A"))
+    zone_idx = {"A": 0, "B": 1, "C": 2}.get(weak_zone, 0)
+    weak_layer = str(info.get("weakest_layer", "0"))
+    # Material shortage: strict blocking only when truly low; keep targeted actions available otherwise.
+    if material < 0.10:
         mask[0:9] = False
         mask[13] = False
-        if corridor_unlock:
-            weak_zone = str(info.get("weakest_zone", "A"))
-            zone_idx = {"A": 0, "B": 1, "C": 2}.get(weak_zone, 0)
-            weak_layer = str(info.get("weakest_layer", "0"))
+        if weak_layer == "0":
+            mask[3 + zone_idx] = True
+        elif weak_layer == "1":
+            mask[6 + zone_idx] = True
+        else:
+            mask[zone_idx] = True
+        mask[6 + zone_idx] = True
+        if corridor_unlock and mes_soc >= 0.09 and road_by_zone[zone_idx] >= 0.25:
+            mask[9 + zone_idx] = True
+        mask[12] = False
+    elif material < 0.15:
+        if resource_split:
+            mask[13] = False
+            if material < 0.12:
+                mask[0:3] = False
             if weak_layer == "0":
                 mask[3 + zone_idx] = True
             elif weak_layer == "1":
                 mask[6 + zone_idx] = True
             else:
                 mask[zone_idx] = True
-            mask[6 + zone_idx] = True
-            if mes_soc >= 0.09 and road_by_zone[zone_idx] >= 0.25:
-                mask[9 + zone_idx] = True
-            mask[12] = False
+        else:
+            # Main benchmark split: do not hard-block broad recovery actions too early.
             mask[13] = False
+            mask[12] = False
+            if weak_layer == "0":
+                mask[3 + zone_idx] = True
+            elif weak_layer == "1":
+                mask[6 + zone_idx] = True
+            else:
+                mask[zone_idx] = True
     if material < 0.10:
         mask[9:12] = False
         mask[12] = False
@@ -588,11 +607,26 @@ def run_training(
                     if eval_budget_mode == "completion_budget_eval":
                         material_now = float(info.get("material_stock", 1.0))
                         floor_risk = float(info.get("resource_floor_risk", 0.0))
+                        split_name = str(info.get("split_name", ""))
+                        resource_split = "resource_constrained" in split_name
+                        weak_zone = str(info.get("weakest_zone", "A"))
+                        zone_idx = {"A": 0, "B": 1, "C": 2}.get(weak_zone, 0)
+                        weak_layer = str(info.get("weakest_layer", "0"))
                         if material_now < 0.16 or floor_risk > 0.75:
                             qarr[14] += 0.04
                         else:
-                            qarr[3:12] += 0.05
-                            qarr[14] -= 0.04
+                            qarr[3:12] += 0.06 if resource_split else 0.08
+                            qarr[14] -= 0.05 if resource_split else 0.10
+                        if material_now < 0.18 and floor_risk < 0.80:
+                            qarr[9:12] -= 0.08
+                            qarr[12] -= 0.10
+                            qarr[13] -= 0.08
+                            if weak_layer == "0":
+                                qarr[3 + zone_idx] += 0.10
+                            elif weak_layer == "1":
+                                qarr[6 + zone_idx] += 0.10
+                            else:
+                                qarr[zone_idx] += 0.08
                     qarr[~valid_mask] = -1e9
                     a = int(np.argmax(qarr))
             phase_action_match_train += int(a == int(np.argmax(_phase_q_bias(action_dim, info, normalized_phase_contract, step))))
@@ -633,8 +667,14 @@ def run_training(
             weakest_close_bonus = 0.18 * (weak_layer_gain + weak_zone_gain) if late_stage else 0.0
             low_violation_finish_bonus = 0.8 if (terminated and ep_violation_count <= 1) else 0.0
             material_now = float(info.get("material_stock", ns[20] if len(ns) > 20 else 0.0))
+            material_prev = float(s[20] if len(s) > 20 else material_now)
+            material_drop = max(0.0, material_prev - material_now)
             material_zero_penalty = 0.8 if material_now <= 0.01 else 0.0
             critical_low_material_penalty = 0.35 if (material_now < 0.10 and a != 14) else 0.0
+            expensive_action = a in {9, 10, 11, 12, 13}
+            material_inefficient_penalty = 0.0
+            if material_now < 0.18 and expensive_action and material_drop > 0.01 and progress_bonus < 0.0018:
+                material_inefficient_penalty = 0.18 + 2.5 * material_drop
             material_buffer_bonus = 0.06 if (material_now > 0.22 and progress_bonus > 0.0) else 0.0
             wait_misuse_penalty = 0.18 if (a == 14 and material_now > 0.22 and progress_bonus < 0.0008) else 0.0
             if str(info.get("stage", "middle")) == "middle" and progress_bonus < 0.0015:
@@ -661,6 +701,18 @@ def run_training(
                 and mid_wait_streak >= 2
             ):
                 repeated_wait_penalty = 0.20 + 0.10 * max(0, mid_wait_streak - 2)
+            split_name = str(info.get("split_name", ""))
+            if (
+                a == 14
+                and str(info.get("stage", "middle")) == "middle"
+                and eval_budget_mode == "completion_budget_eval"
+                and "resource_constrained" not in split_name
+                and feasible_non_wait_exists
+                and corridor_feasible
+                and material_now > 0.10
+                and mid_wait_streak >= 2
+            ):
+                repeated_wait_penalty += 0.10 + 0.05 * max(0, mid_wait_streak - 2)
             middle_stagnation_penalty = 0.18 if mid_stagnation_steps >= 6 else 0.0
             severe_mid_stagnation_penalty = 0.28 if mid_stagnation_steps >= 12 else 0.0
             sustainable_progress_bonus = 0.10 if (progress_bonus > 0.010 and material_now > 0.12) else 0.0
@@ -722,6 +774,7 @@ def run_training(
                 + feeder_late_penalty
                 + material_zero_penalty * reward_controls["material_penalty_scale"]
                 + critical_low_material_penalty * reward_controls["material_penalty_scale"]
+                + material_inefficient_penalty * reward_controls["material_penalty_scale"]
                 + middle_stagnation_penalty
                 + severe_mid_stagnation_penalty
                 + wait_misuse_penalty * reward_controls["wait_penalty_scale"]

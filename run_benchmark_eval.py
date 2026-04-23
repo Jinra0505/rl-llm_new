@@ -21,8 +21,8 @@ DEFAULT_CFG: dict[str, Any] = {
         "temperature": 0.3,
         "max_tokens": 1800,
     },
-    "outer_loop": {"rounds": 2, "candidates_per_round": 1},
-    "env": {"name": "project_recovery", "max_steps": 15},
+    "outer_loop": {"rounds": 3, "candidates_per_round": 2},
+    "env": {"name": "project_recovery", "max_steps": 30},
     "scenario": {"severity": "moderate"},
     "benchmark": {
         "enabled": True,
@@ -100,6 +100,13 @@ def resolve_eval_budget(cfg: dict[str, Any], requested_mode: str) -> tuple[str, 
     return "fixed_budget_eval", env_steps
 
 
+def resolve_train_horizon(cfg: dict[str, Any], eval_budget_mode: str) -> int:
+    env_steps = int(cfg.get("env", {}).get("max_steps", 15))
+    if eval_budget_mode == "completion_budget_eval":
+        return max(30, env_steps)
+    return env_steps
+
+
 def build_reset_options(*, benchmark_mode: str, split_name: str, preset_group: str, preset_name: str, preset_jitter: float, severity: str) -> callable:
     def _resolver(phase: str, episode_idx: int) -> dict[str, Any]:
         phase_split = split_name
@@ -121,7 +128,7 @@ def build_reset_options(*, benchmark_mode: str, split_name: str, preset_group: s
 def run_baseline(seed: int, reward_mode: str, split_name: str, preset_group: str, preset_name: str, preset_jitter: float, severity: str, out_path: Path, cfg: dict[str, Any], eval_budget_mode: str, eval_max_steps: int) -> dict[str, Any]:
     dqn_cfg = dict(cfg["training"])
     dqn_cfg["reward_mode"] = reward_mode
-    train_max_steps = int(cfg["env"].get("max_steps", 60))
+    train_max_steps = int(resolve_train_horizon(cfg, eval_budget_mode))
     metrics = run_training(
         revise_module_path=Path("baseline_noop.py"),
         env_name=str(cfg["env"]["name"]),
@@ -164,6 +171,7 @@ def run_outer_pipeline(mode: str, seed: int, reward_mode: str, split_name: str, 
     cfg["benchmark"]["preset_jitter"] = preset_jitter
     cfg["benchmark"]["fixed_severity"] = severity
     cfg["scenario"]["severity"] = severity
+    cfg["env"]["max_steps"] = int(resolve_train_horizon(cfg, eval_budget_mode))
     run_root = out_path.parent / "outer_loop_runs"
     run_root.mkdir(parents=True, exist_ok=True)
     cfg["paths"]["outputs_dir"] = str(run_root)
@@ -172,13 +180,18 @@ def run_outer_pipeline(mode: str, seed: int, reward_mode: str, split_name: str, 
     cfg_path.write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
 
     outer_cfg = cfg.get("outer_loop", {}) if isinstance(cfg.get("outer_loop"), dict) else {}
+    fixed_task_mode = ""
     if mode == "single_shot_llm":
         rounds = "1"
         candidates = "1"
+    elif mode == "ablation_fixed_global":
+        rounds = str(max(2, int(outer_cfg.get("rounds", 3))))
+        candidates = str(max(1, int(outer_cfg.get("candidates_per_round", 2))))
+        fixed_task_mode = "global_efficiency_priority"
     else:
         # Keep full outer-loop materially different from single-shot.
-        rounds = str(max(2, int(outer_cfg.get("rounds", 2))))
-        candidates = str(max(1, int(outer_cfg.get("candidates_per_round", 2))))
+        rounds = "3"
+        candidates = "2"
     before = {p.name for p in run_root.glob("run_*") if p.is_dir()}
     cmd = [
         "python3",
@@ -199,6 +212,8 @@ def run_outer_pipeline(mode: str, seed: int, reward_mode: str, split_name: str, 
         "--config",
         str(cfg_path),
     ]
+    if fixed_task_mode:
+        cmd.extend(["--fixed-task-mode", fixed_task_mode])
     try:
         subprocess.run(cmd, check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError as exc:
@@ -244,7 +259,7 @@ def run_outer_pipeline(mode: str, seed: int, reward_mode: str, split_name: str, 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run aligned benchmark evaluation for baseline/single/full pipelines.")
-    parser.add_argument("--mode", choices=["baseline_rl", "single_shot_llm", "full_outer_loop"], required=True)
+    parser.add_argument("--mode", choices=["baseline_rl", "single_shot_llm", "full_outer_loop", "ablation_fixed_global"], required=True)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--reward-mode", choices=["clean", "engineered"], default="engineered")
     parser.add_argument("--split-name", default="benchmark_eval_presets")
