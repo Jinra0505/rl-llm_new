@@ -1,0 +1,12 @@
+Missing artifact_run_dir paths:
+- outputs/final_runs/benchmark_eval_presets/outer_loop_runs/run_20260422_021653
+- outputs/final_runs/benchmark_eval_presets/outer_loop_runs/run_20260422_022015
+- outputs/final_runs/benchmark_eval_presets/outer_loop_runs/run_20260422_022318
+- outputs/final_runs/benchmark_eval_presets/outer_loop_runs/run_20260422_022620
+- outputs/final_runs/benchmark_eval_presets/outer_loop_runs/run_20260422_023350
+- outputs/final_runs/benchmark_eval_presets/outer_loop_runs/run_20260422_024027
+- outputs/resource_constrained_validation_20260418_final/outer_loop_runs/run_20260419_002853
+- outputs/resource_constrained_validation_20260418_final/outer_loop_runs/run_20260419_003417
+- outputs/resource_constrained_validation_20260418_final/outer_loop_runs/run_20260419_004023
+
+Future reruns should keep artifact_run_dir trees and optional llm_call_log.json enabled.

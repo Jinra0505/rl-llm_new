@@ -1,0 +1,185 @@
+{
+  "scenario": "standard_moderate",
+  "methods": {
+    "baseline_rl": {
+      "n_total": 3,
+      "n_valid": 3,
+      "metrics": {
+        "selection_score": {
+          "mean": 0.3628068070747574,
+          "std": 0.08346482934925356
+        },
+        "min_recovery_ratio": {
+          "mean": 0.5728520866897371,
+          "std": 0.018601335799963394
+        },
+        "critical_load_recovery_ratio": {
+          "mean": 0.7728350493643019,
+          "std": 0.046627227170846754
+        },
+        "communication_recovery_ratio": {
+          "mean": 0.6447337170441946,
+          "std": 0.06169167681559844
+        },
+        "power_recovery_ratio": {
+          "mean": 0.7632449633545346,
+          "std": 0.04340415629620939
+        },
+        "road_recovery_ratio": {
+          "mean": 0.5728520866897371,
+          "std": 0.018601335799963394
+        },
+        "constraint_violation_rate_eval": {
+          "mean": 0.05416666666666667,
+          "std": 0.07660323462854265
+        },
+        "invalid_action_rate_eval": {
+          "mean": 0.05416666666666667,
+          "std": 0.07660323462854265
+        },
+        "wait_hold_usage_eval": {
+          "mean": 0.23295454545454544,
+          "std": 0.0754773858984468
+        },
+        "mean_progress_delta_eval": {
+          "mean": 0.0015766458654845202,
+          "std": 0.0004318320170877532
+        },
+        "eval_success_rate": {
+          "mean": 0.1111111111111111,
+          "std": 0.15713484026367722
+        },
+        "safety_capacity_index": {
+          "mean": 0.7547404976189137,
+          "std": 0.01193296940279924
+        }
+      },
+      "evidence_level": "per_seed_n3",
+      "source_quality_note": "Complete 3-seed per-seed evidence.",
+      "suitable_for_main_text": true,
+      "suitable_for_supplement": true
+    },
+    "single_shot_llm": {
+      "n_total": 3,
+      "n_valid": 3,
+      "metrics": {
+        "selection_score": {
+          "mean": 0.4513093130954481,
+          "std": 0.05218703015243198
+        },
+        "min_recovery_ratio": {
+          "mean": 0.5928403900729285,
+          "std": 0.051157376424206355
+        },
+        "critical_load_recovery_ratio": {
+          "mean": 0.7719367841879526,
+          "std": 0.0017938395951406475
+        },
+        "communication_recovery_ratio": {
+          "mean": 0.6868152353498671,
+          "std": 0.004092891088158898
+        },
+        "power_recovery_ratio": {
+          "mean": 0.7930054797066582,
+          "std": 0.04443728518786556
+        },
+        "road_recovery_ratio": {
+          "mean": 0.5928403900729285,
+          "std": 0.051157376424206355
+        },
+        "constraint_violation_rate_eval": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "invalid_action_rate_eval": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "wait_hold_usage_eval": {
+          "mean": 0.1900534334186865,
+          "std": 0.017342429416706204
+        },
+        "mean_progress_delta_eval": {
+          "mean": 0.002238789176239986,
+          "std": 0.00014680496160040846
+        },
+        "eval_success_rate": {
+          "mean": 0.2222222222222222,
+          "std": 0.15713484026367722
+        },
+        "safety_capacity_index": {
+          "mean": 0.7776720109913084,
+          "std": 0.018525948281992697
+        }
+      },
+      "evidence_level": "per_seed_n3",
+      "source_quality_note": "Complete 3-seed per-seed evidence.",
+      "suitable_for_main_text": true,
+      "suitable_for_supplement": true
+    },
+    "full_outer_loop": {
+      "n_total": 3,
+      "n_valid": 3,
+      "metrics": {
+        "selection_score": {
+          "mean": 0.40245188633380113,
+          "std": 0.06249886241866282
+        },
+        "min_recovery_ratio": {
+          "mean": 0.6503631704383426,
+          "std": 0.014845065613100039
+        },
+        "critical_load_recovery_ratio": {
+          "mean": 0.7815036508772109,
+          "std": 0.015086617934869723
+        },
+        "communication_recovery_ratio": {
+          "mean": 0.6807284984323714,
+          "std": 0.01980322951826376
+        },
+        "power_recovery_ratio": {
+          "mean": 0.7494093411498599,
+          "std": 0.01815438796123204
+        },
+        "road_recovery_ratio": {
+          "mean": 0.6605303552415636,
+          "std": 0.023198608612855855
+        },
+        "constraint_violation_rate_eval": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "invalid_action_rate_eval": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "wait_hold_usage_eval": {
+          "mean": 0.1797782874617737,
+          "std": 0.01568884212418331
+        },
+        "mean_progress_delta_eval": {
+          "mean": 0.0022242837679133844,
+          "std": 0.00020701042803670662
+        },
+        "eval_success_rate": {
+          "mean": 0.1111111111111111,
+          "std": 0.15713484026367722
+        },
+        "safety_capacity_index": {
+          "mean": 0.8011533874604437,
+          "std": 0.008872575700850694
+        }
+      },
+      "evidence_level": "per_seed_n3",
+      "source_quality_note": "Complete 3-seed per-seed evidence.",
+      "suitable_for_main_text": true,
+      "suitable_for_supplement": true
+    }
+  },
+  "notes": [
+    "Main case uses per-seed files from outputs/final_runs/benchmark_eval_presets, not topic_summary sentinel aggregates.",
+    "single_shot may have highest aggregate selection_score depending on cleaned means.",
+    "full_outer_loop should be interpreted as potentially stronger on recovery-floor robustness, zero unsafe decisions, and lower wait usage when supported by data.",
+    "Do not claim full_outer_loop is best on every metric unless supported by means."
+  ]
+}

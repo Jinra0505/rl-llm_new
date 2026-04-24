@@ -1,0 +1,242 @@
+{
+  "scenario": "standard_severe",
+  "methods": {
+    "baseline_rl": {
+      "n_total": 1,
+      "n_valid": 1,
+      "metrics": {
+        "selection_score": {
+          "mean": 0.3132951339540027,
+          "std": 0.0
+        },
+        "min_recovery_ratio": {
+          "mean": 0.5867565506034428,
+          "std": 0.0
+        },
+        "critical_load_recovery_ratio": {
+          "mean": 0.8495023283693525,
+          "std": 0.0
+        },
+        "communication_recovery_ratio": {
+          "mean": null,
+          "std": null
+        },
+        "power_recovery_ratio": {
+          "mean": null,
+          "std": null
+        },
+        "road_recovery_ratio": {
+          "mean": null,
+          "std": null
+        },
+        "constraint_violation_rate_eval": {
+          "mean": 0.08055555555555556,
+          "std": 0.0
+        },
+        "invalid_action_rate_eval": {
+          "mean": 0.08055555555555556,
+          "std": 0.0
+        },
+        "wait_hold_usage_eval": {
+          "mean": 0.2555555555555556,
+          "std": 0.0
+        },
+        "mean_progress_delta_eval": {
+          "mean": null,
+          "std": null
+        },
+        "eval_success_rate": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "safety_capacity_index": {
+          "mean": 0.7785239409738117,
+          "std": 0.0
+        }
+      },
+      "evidence_level": "aggregate_only_n1",
+      "source_quality_note": "Aggregate-only source; per-seed files unavailable.",
+      "suitable_for_main_text": false,
+      "suitable_for_supplement": true
+    },
+    "single_shot_llm": {
+      "n_total": 1,
+      "n_valid": 1,
+      "metrics": {
+        "selection_score": {
+          "mean": 0.4190325405041595,
+          "std": 0.0
+        },
+        "min_recovery_ratio": {
+          "mean": 0.6191268596384261,
+          "std": 0.0
+        },
+        "critical_load_recovery_ratio": {
+          "mean": 0.8685031467013888,
+          "std": 0.0
+        },
+        "communication_recovery_ratio": {
+          "mean": null,
+          "std": null
+        },
+        "power_recovery_ratio": {
+          "mean": null,
+          "std": null
+        },
+        "road_recovery_ratio": {
+          "mean": null,
+          "std": null
+        },
+        "constraint_violation_rate_eval": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "invalid_action_rate_eval": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "wait_hold_usage_eval": {
+          "mean": 0.2634132502776571,
+          "std": 0.0
+        },
+        "mean_progress_delta_eval": {
+          "mean": null,
+          "std": null
+        },
+        "eval_success_rate": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "safety_capacity_index": {
+          "mean": 0.8206705022189352,
+          "std": 0.0
+        }
+      },
+      "evidence_level": "aggregate_only_n1",
+      "source_quality_note": "Aggregate-only source; per-seed files unavailable.",
+      "suitable_for_main_text": false,
+      "suitable_for_supplement": true
+    },
+    "full_outer_loop": {
+      "n_total": 1,
+      "n_valid": 1,
+      "metrics": {
+        "selection_score": {
+          "mean": 0.33977358437246746,
+          "std": 0.0
+        },
+        "min_recovery_ratio": {
+          "mean": 0.6171037091149224,
+          "std": 0.0
+        },
+        "critical_load_recovery_ratio": {
+          "mean": 0.8640084432231054,
+          "std": 0.0
+        },
+        "communication_recovery_ratio": {
+          "mean": null,
+          "std": null
+        },
+        "power_recovery_ratio": {
+          "mean": null,
+          "std": null
+        },
+        "road_recovery_ratio": {
+          "mean": null,
+          "std": null
+        },
+        "constraint_violation_rate_eval": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "invalid_action_rate_eval": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "wait_hold_usage_eval": {
+          "mean": 0.2555555555555556,
+          "std": 0.0
+        },
+        "mean_progress_delta_eval": {
+          "mean": null,
+          "std": null
+        },
+        "eval_success_rate": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "safety_capacity_index": {
+          "mean": 0.8183892533183098,
+          "std": 0.0
+        }
+      },
+      "evidence_level": "aggregate_only_n1",
+      "source_quality_note": "Aggregate-only source; per-seed files unavailable.",
+      "suitable_for_main_text": false,
+      "suitable_for_supplement": true
+    },
+    "ablation_fixed_global": {
+      "n_total": 1,
+      "n_valid": 1,
+      "metrics": {
+        "selection_score": {
+          "mean": 0.4330827749505773,
+          "std": 0.0
+        },
+        "min_recovery_ratio": {
+          "mean": 0.6227408614423541,
+          "std": 0.0
+        },
+        "critical_load_recovery_ratio": {
+          "mean": 0.8770474592844645,
+          "std": 0.0
+        },
+        "communication_recovery_ratio": {
+          "mean": null,
+          "std": null
+        },
+        "power_recovery_ratio": {
+          "mean": null,
+          "std": null
+        },
+        "road_recovery_ratio": {
+          "mean": null,
+          "std": null
+        },
+        "constraint_violation_rate_eval": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "invalid_action_rate_eval": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "wait_hold_usage_eval": {
+          "mean": 0.2627492877492878,
+          "std": 0.0
+        },
+        "mean_progress_delta_eval": {
+          "mean": null,
+          "std": null
+        },
+        "eval_success_rate": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "safety_capacity_index": {
+          "mean": 0.8249259122543865,
+          "std": 0.0
+        }
+      },
+      "evidence_level": "aggregate_only_n1",
+      "source_quality_note": "Aggregate-only source; per-seed files unavailable.",
+      "suitable_for_main_text": false,
+      "suitable_for_supplement": true
+    }
+  },
+  "notes": [
+    "standard_severe preserved as supplemental robustness summary; no rerun performed.",
+    "Do not claim full_outer_loop dominates all methods if single_shot_llm or ablation_fixed_global has higher selection_score or critical_load_recovery_ratio.",
+    "Per-seed standard_severe JSONs were unavailable in current repository; summary derived from existing topic_summary."
+  ]
+}
