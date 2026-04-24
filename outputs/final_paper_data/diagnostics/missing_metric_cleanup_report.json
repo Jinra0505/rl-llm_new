@@ -1,0 +1,144 @@
+{
+  "cleanups": [
+    {
+      "scenario": "resource_moderate",
+      "method": "ablation_fixed_global",
+      "metric": "communication_recovery_ratio",
+      "old_mean": 0.0,
+      "old_std": 0.0
+    },
+    {
+      "scenario": "resource_moderate",
+      "method": "ablation_fixed_global",
+      "metric": "power_recovery_ratio",
+      "old_mean": 0.0,
+      "old_std": 0.0
+    },
+    {
+      "scenario": "resource_moderate",
+      "method": "ablation_fixed_global",
+      "metric": "road_recovery_ratio",
+      "old_mean": 0.0,
+      "old_std": 0.0
+    },
+    {
+      "scenario": "resource_moderate",
+      "method": "ablation_fixed_global",
+      "metric": "mean_progress_delta_eval",
+      "old_mean": 0.0,
+      "old_std": 0.0
+    },
+    {
+      "scenario": "standard_severe",
+      "method": "baseline_rl",
+      "metric": "communication_recovery_ratio",
+      "old_mean": 0.0,
+      "old_std": 0.0
+    },
+    {
+      "scenario": "standard_severe",
+      "method": "baseline_rl",
+      "metric": "power_recovery_ratio",
+      "old_mean": 0.0,
+      "old_std": 0.0
+    },
+    {
+      "scenario": "standard_severe",
+      "method": "baseline_rl",
+      "metric": "road_recovery_ratio",
+      "old_mean": 0.0,
+      "old_std": 0.0
+    },
+    {
+      "scenario": "standard_severe",
+      "method": "baseline_rl",
+      "metric": "mean_progress_delta_eval",
+      "old_mean": 0.0,
+      "old_std": 0.0
+    },
+    {
+      "scenario": "standard_severe",
+      "method": "single_shot_llm",
+      "metric": "communication_recovery_ratio",
+      "old_mean": 0.0,
+      "old_std": 0.0
+    },
+    {
+      "scenario": "standard_severe",
+      "method": "single_shot_llm",
+      "metric": "power_recovery_ratio",
+      "old_mean": 0.0,
+      "old_std": 0.0
+    },
+    {
+      "scenario": "standard_severe",
+      "method": "single_shot_llm",
+      "metric": "road_recovery_ratio",
+      "old_mean": 0.0,
+      "old_std": 0.0
+    },
+    {
+      "scenario": "standard_severe",
+      "method": "single_shot_llm",
+      "metric": "mean_progress_delta_eval",
+      "old_mean": 0.0,
+      "old_std": 0.0
+    },
+    {
+      "scenario": "standard_severe",
+      "method": "full_outer_loop",
+      "metric": "communication_recovery_ratio",
+      "old_mean": 0.0,
+      "old_std": 0.0
+    },
+    {
+      "scenario": "standard_severe",
+      "method": "full_outer_loop",
+      "metric": "power_recovery_ratio",
+      "old_mean": 0.0,
+      "old_std": 0.0
+    },
+    {
+      "scenario": "standard_severe",
+      "method": "full_outer_loop",
+      "metric": "road_recovery_ratio",
+      "old_mean": 0.0,
+      "old_std": 0.0
+    },
+    {
+      "scenario": "standard_severe",
+      "method": "full_outer_loop",
+      "metric": "mean_progress_delta_eval",
+      "old_mean": 0.0,
+      "old_std": 0.0
+    },
+    {
+      "scenario": "standard_severe",
+      "method": "ablation_fixed_global",
+      "metric": "communication_recovery_ratio",
+      "old_mean": 0.0,
+      "old_std": 0.0
+    },
+    {
+      "scenario": "standard_severe",
+      "method": "ablation_fixed_global",
+      "metric": "power_recovery_ratio",
+      "old_mean": 0.0,
+      "old_std": 0.0
+    },
+    {
+      "scenario": "standard_severe",
+      "method": "ablation_fixed_global",
+      "metric": "road_recovery_ratio",
+      "old_mean": 0.0,
+      "old_std": 0.0
+    },
+    {
+      "scenario": "standard_severe",
+      "method": "ablation_fixed_global",
+      "metric": "mean_progress_delta_eval",
+      "old_mean": 0.0,
+      "old_std": 0.0
+    }
+  ]
+}

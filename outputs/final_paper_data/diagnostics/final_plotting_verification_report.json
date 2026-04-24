@@ -1,0 +1,23 @@
+{
+  "no_summary_sentinel": true,
+  "summary_sentinel_violations": [],
+  "resource_single_shot_seed42_marked_invalid": true,
+  "unavailable_metrics_not_zero_encoded": true,
+  "unavailable_metric_zero_violations": [],
+  "true_zero_safety_metrics_numeric": true,
+  "action_usage_complete": true,
+  "action_usage_complete_missing_count": 0,
+  "representative_trace_action_usage_complete": true,
+  "representative_trace_action_usage_complete_missing_count": 0,
+  "candidate_selected_flags_consistent": true,
+  "all_csv_readable": true,
+  "csv_errors": [],
+  "all_json_parseable": true,
+  "json_errors": [],
+  "no_binary_files": true,
+  "non_text_files": [],
+  "figure_ready_metrics_exists": true,
+  "plotting_guide_exists": true,
+  "figure_ready_metrics_schema_ok": true,
+  "evidence_level_present": true
+}

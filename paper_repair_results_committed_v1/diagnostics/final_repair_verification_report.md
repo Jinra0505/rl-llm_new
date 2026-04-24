@@ -1,0 +1,17 @@
+# Final Plotting Verification Report
+- no_summary_sentinel: **True**
+- resource_single_shot_seed42_marked_invalid: **True**
+- unavailable_metrics_not_zero_encoded: **True**
+- true_zero_safety_metrics_numeric: **True**
+- action_usage_complete: **True**
+- action_usage_complete_missing_count: **0**
+- representative_trace_action_usage_complete: **True**
+- representative_trace_action_usage_complete_missing_count: **0**
+- candidate_selected_flags_consistent: **True**
+- all_csv_readable: **True**
+- all_json_parseable: **True**
+- no_binary_files: **True**
+- figure_ready_metrics_exists: **True**
+- plotting_guide_exists: **True**
+- figure_ready_metrics_schema_ok: **True**
+- evidence_level_present: **True**

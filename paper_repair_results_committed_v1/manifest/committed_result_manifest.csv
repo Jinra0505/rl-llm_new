@@ -1,0 +1,21 @@
+source_folder,committed_folder,copied_file,summarized_file,raw_export_only_file,seed42_valid,standard_severe_status,remaining_limitations
+outputs_targeted_repair_export_only/,paper_repair_results_committed_v1/,final_tables/standard_moderate_summary.csv,process_summaries/process_file_inventory.csv,,unknown,per_seed_n3,compact summaries committed; raw traces export-only
+outputs_targeted_repair_export_only/,paper_repair_results_committed_v1/,final_tables/standard_moderate_summary.md,process_summaries/standard_moderate_mean_cumulative_progress.csv,,unknown,per_seed_n3,compact summaries committed; raw traces export-only
+outputs_targeted_repair_export_only/,paper_repair_results_committed_v1/,final_tables/resource_moderate_summary.csv,process_summaries/standard_moderate_mean_stepwise_progress.csv,,unknown,per_seed_n3,compact summaries committed; raw traces export-only
+outputs_targeted_repair_export_only/,paper_repair_results_committed_v1/,final_tables/resource_moderate_summary.md,process_summaries/standard_moderate_action_category_share.csv,,unknown,per_seed_n3,compact summaries committed; raw traces export-only
+outputs_targeted_repair_export_only/,paper_repair_results_committed_v1/,final_tables/standard_severe_summary.csv,process_summaries/standard_moderate_stage_share.csv,,unknown,per_seed_n3,compact summaries committed; raw traces export-only
+outputs_targeted_repair_export_only/,paper_repair_results_committed_v1/,final_tables/standard_severe_summary.md,process_summaries/robustness_key_metrics_long.csv,,unknown,per_seed_n3,compact summaries committed; raw traces export-only
+outputs_targeted_repair_export_only/,paper_repair_results_committed_v1/,final_tables/robustness_stress_summary.csv,,,unknown,per_seed_n3,compact summaries committed; raw traces export-only
+outputs_targeted_repair_export_only/,paper_repair_results_committed_v1/,final_tables/robustness_stress_summary.md,,,unknown,per_seed_n3,compact summaries committed; raw traces export-only
+outputs_targeted_repair_export_only/,paper_repair_results_committed_v1/,final_tables/figure_ready_metrics.csv,,,unknown,per_seed_n3,compact summaries committed; raw traces export-only
+outputs_targeted_repair_export_only/,paper_repair_results_committed_v1/,final_tables/figure_ready_metrics.md,,,unknown,per_seed_n3,compact summaries committed; raw traces export-only
+outputs_targeted_repair_export_only/,paper_repair_results_committed_v1/,final_tables/standard_moderate_per_seed.csv,,,unknown,per_seed_n3,compact summaries committed; raw traces export-only
+outputs_targeted_repair_export_only/,paper_repair_results_committed_v1/,final_tables/resource_moderate_per_seed.csv,,,unknown,per_seed_n3,compact summaries committed; raw traces export-only
+outputs_targeted_repair_export_only/,paper_repair_results_committed_v1/,final_tables/standard_severe_per_seed.csv,,,unknown,per_seed_n3,compact summaries committed; raw traces export-only
+outputs_targeted_repair_export_only/,paper_repair_results_committed_v1/,diagnostics/inspection_report.md,,,unknown,per_seed_n3,compact summaries committed; raw traces export-only
+outputs_targeted_repair_export_only/,paper_repair_results_committed_v1/,diagnostics/resource_moderate_single_shot_seed42_repair_report.md,,,unknown,per_seed_n3,compact summaries committed; raw traces export-only
+outputs_targeted_repair_export_only/,paper_repair_results_committed_v1/,diagnostics/standard_severe_per_seed_report.md,,,unknown,per_seed_n3,compact summaries committed; raw traces export-only
+outputs_targeted_repair_export_only/,paper_repair_results_committed_v1/,diagnostics/standard_moderate_process_export_report.md,,,unknown,per_seed_n3,compact summaries committed; raw traces export-only
+outputs_targeted_repair_export_only/,paper_repair_results_committed_v1/,diagnostics/final_repair_verification_report.md,,,unknown,per_seed_n3,compact summaries committed; raw traces export-only
+outputs_targeted_repair_export_only/,paper_repair_results_committed_v1/,diagnostics/git_status_after_export.txt,,,unknown,per_seed_n3,compact summaries committed; raw traces export-only
+outputs_targeted_repair_export_only/,paper_repair_results_committed_v1/,diagnostics/git_diff_stat_after_export.txt,,,unknown,per_seed_n3,compact summaries committed; raw traces export-only

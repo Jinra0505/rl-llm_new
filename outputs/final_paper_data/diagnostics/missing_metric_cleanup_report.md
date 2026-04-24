@@ -1,0 +1,22 @@
+# Missing Metric Cleanup Report
+
+- resource_moderate / ablation_fixed_global / communication_recovery_ratio: mean/std set to null from 0.0/0.0
+- resource_moderate / ablation_fixed_global / power_recovery_ratio: mean/std set to null from 0.0/0.0
+- resource_moderate / ablation_fixed_global / road_recovery_ratio: mean/std set to null from 0.0/0.0
+- resource_moderate / ablation_fixed_global / mean_progress_delta_eval: mean/std set to null from 0.0/0.0
+- standard_severe / baseline_rl / communication_recovery_ratio: mean/std set to null from 0.0/0.0
+- standard_severe / baseline_rl / power_recovery_ratio: mean/std set to null from 0.0/0.0
+- standard_severe / baseline_rl / road_recovery_ratio: mean/std set to null from 0.0/0.0
+- standard_severe / baseline_rl / mean_progress_delta_eval: mean/std set to null from 0.0/0.0
+- standard_severe / single_shot_llm / communication_recovery_ratio: mean/std set to null from 0.0/0.0
+- standard_severe / single_shot_llm / power_recovery_ratio: mean/std set to null from 0.0/0.0
+- standard_severe / single_shot_llm / road_recovery_ratio: mean/std set to null from 0.0/0.0
+- standard_severe / single_shot_llm / mean_progress_delta_eval: mean/std set to null from 0.0/0.0
+- standard_severe / full_outer_loop / communication_recovery_ratio: mean/std set to null from 0.0/0.0
+- standard_severe / full_outer_loop / power_recovery_ratio: mean/std set to null from 0.0/0.0
+- standard_severe / full_outer_loop / road_recovery_ratio: mean/std set to null from 0.0/0.0
+- standard_severe / full_outer_loop / mean_progress_delta_eval: mean/std set to null from 0.0/0.0
+- standard_severe / ablation_fixed_global / communication_recovery_ratio: mean/std set to null from 0.0/0.0
+- standard_severe / ablation_fixed_global / power_recovery_ratio: mean/std set to null from 0.0/0.0
+- standard_severe / ablation_fixed_global / road_recovery_ratio: mean/std set to null from 0.0/0.0
+- standard_severe / ablation_fixed_global / mean_progress_delta_eval: mean/std set to null from 0.0/0.0

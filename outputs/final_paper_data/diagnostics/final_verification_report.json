@@ -1,0 +1,132 @@
+{
+  "no_summary_sentinel": true,
+  "summary_sentinel_violations": [],
+  "resource_single_shot_sentinel_rows": 1,
+  "sentinel_rows_marked_invalid": true,
+  "all_csv_readable": true,
+  "csv_checks": [
+    {
+      "file": "outputs/final_paper_data/final_tables/resource_moderate_per_seed.csv",
+      "readable": true
+    },
+    {
+      "file": "outputs/final_paper_data/final_tables/resource_moderate_summary.csv",
+      "readable": true
+    },
+    {
+      "file": "outputs/final_paper_data/final_tables/standard_moderate_per_seed.csv",
+      "readable": true
+    },
+    {
+      "file": "outputs/final_paper_data/final_tables/standard_moderate_summary.csv",
+      "readable": true
+    },
+    {
+      "file": "outputs/final_paper_data/final_tables/standard_severe_per_seed.csv",
+      "readable": true
+    },
+    {
+      "file": "outputs/final_paper_data/final_tables/standard_severe_summary.csv",
+      "readable": true
+    },
+    {
+      "file": "outputs/final_paper_data/process/action_usage_long.csv",
+      "readable": true
+    },
+    {
+      "file": "outputs/final_paper_data/process/candidate_selection_trace.csv",
+      "readable": true
+    },
+    {
+      "file": "outputs/final_paper_data/process/eval_trajectory_summary.csv",
+      "readable": true
+    },
+    {
+      "file": "outputs/final_paper_data/process/llm_call_summary.csv",
+      "readable": true
+    },
+    {
+      "file": "outputs/final_paper_data/process/outer_loop_round_summary.csv",
+      "readable": true
+    },
+    {
+      "file": "outputs/final_paper_data/process/representative_eval_trace_long.csv",
+      "readable": true
+    },
+    {
+      "file": "outputs/final_paper_data/process/resource_end_summary.csv",
+      "readable": true
+    },
+    {
+      "file": "outputs/final_paper_data/process/reward_curves_long.csv",
+      "readable": true
+    },
+    {
+      "file": "outputs/final_paper_data/process/routing_trace.csv",
+      "readable": true
+    },
+    {
+      "file": "outputs/final_paper_data/process/stage_distribution_long.csv",
+      "readable": true
+    },
+    {
+      "file": "outputs/final_paper_data/process/zone_layer_recovery_long.csv",
+      "readable": true
+    }
+  ],
+  "all_json_parseable": true,
+  "json_checks": [
+    {
+      "file": "outputs/final_paper_data/diagnostics/file_inventory.json",
+      "parseable": true
+    },
+    {
+      "file": "outputs/final_paper_data/diagnostics/final_verification_report.json",
+      "parseable": true
+    },
+    {
+      "file": "outputs/final_paper_data/diagnostics/resource_moderate_full_vs_ablation_diagnostic.json",
+      "parseable": true
+    },
+    {
+      "file": "outputs/final_paper_data/diagnostics/resource_moderate_single_shot_rerun_report.json",
+      "parseable": true
+    },
+    {
+      "file": "outputs/final_paper_data/diagnostics/result_validation_report.json",
+      "parseable": true
+    },
+    {
+      "file": "outputs/final_paper_data/final_data_manifest.json",
+      "parseable": true
+    },
+    {
+      "file": "outputs/final_paper_data/final_tables/resource_moderate_summary.json",
+      "parseable": true
+    },
+    {
+      "file": "outputs/final_paper_data/final_tables/standard_moderate_summary.json",
+      "parseable": true
+    },
+    {
+      "file": "outputs/final_paper_data/final_tables/standard_severe_summary.json",
+      "parseable": true
+    },
+    {
+      "file": "outputs/final_paper_data/reruns/resource_moderate/single_shot_llm__seed42.json",
+      "parseable": true
+    },
+    {
+      "file": "outputs/final_paper_data/reruns/resource_moderate/single_shot_llm__seed43.json",
+      "parseable": true
+    },
+    {
+      "file": "outputs/final_paper_data/reruns/resource_moderate/single_shot_llm__seed44.json",
+      "parseable": true
+    }
+  ],
+  "no_binary_files_created": true,
+  "unexpected_nontext_files": [],
+  "standard_moderate_from_main_case_files": true,
+  "resource_single_shot_uses_reruns": true
+}

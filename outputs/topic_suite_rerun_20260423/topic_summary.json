@@ -1,0 +1,500 @@
+{
+  "scenarios": {
+    "standard_moderate": {
+      "methods": {
+        "baseline_rl": {
+          "n": 3,
+          "completed": 3,
+          "failed": 0,
+          "metrics": {
+            "selection_score": {
+              "mean": 0.4106497732987551,
+              "std": 0.010504362433620401
+            },
+            "min_recovery_ratio": {
+              "mean": 0.6225333246919843,
+              "std": 0.007837871464210618
+            },
+            "critical_load_recovery_ratio": {
+              "mean": 0.8488253951072693,
+              "std": 0.010439746206807113
+            },
+            "constraint_violation_rate_eval": {
+              "mean": 0.20458602728889186,
+              "std": 0.012341518434022238
+            },
+            "invalid_action_rate_eval": {
+              "mean": 0.20458602728889186,
+              "std": 0.012341518434022238
+            },
+            "wait_hold_usage_eval": {
+              "mean": 0.18084299090986386,
+              "std": 0.012247255734805241
+            },
+            "safety_capacity_index": {
+              "mean": 0.7535997437430711,
+              "std": 0.004868124882730094
+            }
+          }
+        },
+        "single_shot_llm": {
+          "n": 3,
+          "completed": 3,
+          "failed": 0,
+          "metrics": {
+            "selection_score": {
+              "mean": -1000000000.0,
+              "std": 0.0
+            },
+            "min_recovery_ratio": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "critical_load_recovery_ratio": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "constraint_violation_rate_eval": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "invalid_action_rate_eval": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "wait_hold_usage_eval": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "safety_capacity_index": {
+              "mean": 0.3,
+              "std": 0.0
+            }
+          }
+        },
+        "full_outer_loop": {
+          "n": 3,
+          "completed": 3,
+          "failed": 0,
+          "metrics": {
+            "selection_score": {
+              "mean": -1000000000.0,
+              "std": 0.0
+            },
+            "min_recovery_ratio": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "critical_load_recovery_ratio": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "constraint_violation_rate_eval": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "invalid_action_rate_eval": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "wait_hold_usage_eval": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "safety_capacity_index": {
+              "mean": 0.3,
+              "std": 0.0
+            }
+          }
+        },
+        "ablation_fixed_global": {
+          "n": 3,
+          "completed": 3,
+          "failed": 0,
+          "metrics": {
+            "selection_score": {
+              "mean": -1000000000.0,
+              "std": 0.0
+            },
+            "min_recovery_ratio": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "critical_load_recovery_ratio": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "constraint_violation_rate_eval": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "invalid_action_rate_eval": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "wait_hold_usage_eval": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "safety_capacity_index": {
+              "mean": 0.3,
+              "std": 0.0
+            }
+          }
+        }
+      }
+    },
+    "standard_severe": {
+      "methods": {
+        "baseline_rl": {
+          "n": 3,
+          "completed": 3,
+          "failed": 0,
+          "metrics": {
+            "selection_score": {
+              "mean": 0.3132951339540027,
+              "std": 0.0447750425524591
+            },
+            "min_recovery_ratio": {
+              "mean": 0.5867565506034428,
+              "std": 0.04512198846392487
+            },
+            "critical_load_recovery_ratio": {
+              "mean": 0.8495023283693525,
+              "std": 0.04860557255903047
+            },
+            "constraint_violation_rate_eval": {
+              "mean": 0.08055555555555556,
+              "std": 0.11392275919116598
+            },
+            "invalid_action_rate_eval": {
+              "mean": 0.08055555555555556,
+              "std": 0.11392275919116598
+            },
+            "wait_hold_usage_eval": {
+              "mean": 0.2555555555555556,
+              "std": 0.010393492741038728
+            },
+            "safety_capacity_index": {
+              "mean": 0.7785239409738117,
+              "std": 0.06673470811620077
+            }
+          }
+        },
+        "single_shot_llm": {
+          "n": 3,
+          "completed": 3,
+          "failed": 0,
+          "metrics": {
+            "selection_score": {
+              "mean": 0.4190325405041595,
+              "std": 0.05780613700552964
+            },
+            "min_recovery_ratio": {
+              "mean": 0.6191268596384261,
+              "std": 0.0024729673332624215
+            },
+            "critical_load_recovery_ratio": {
+              "mean": 0.8685031467013888,
+              "std": 0.006132514599426402
+            },
+            "constraint_violation_rate_eval": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "invalid_action_rate_eval": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "wait_hold_usage_eval": {
+              "mean": 0.2634132502776571,
+              "std": 0.0036829400537113587
+            },
+            "safety_capacity_index": {
+              "mean": 0.8206705022189352,
+              "std": 0.0018985749997182974
+            }
+          }
+        },
+        "full_outer_loop": {
+          "n": 3,
+          "completed": 3,
+          "failed": 0,
+          "metrics": {
+            "selection_score": {
+              "mean": 0.33977358437246746,
+              "std": 0.00889692394035016
+            },
+            "min_recovery_ratio": {
+              "mean": 0.6171037091149224,
+              "std": 0.00217709094337264
+            },
+            "critical_load_recovery_ratio": {
+              "mean": 0.8640084432231054,
+              "std": 0.036437269665450356
+            },
+            "constraint_violation_rate_eval": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "invalid_action_rate_eval": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "wait_hold_usage_eval": {
+              "mean": 0.2555555555555556,
+              "std": 0.003928371006591943
+            },
+            "safety_capacity_index": {
+              "mean": 0.8183892533183098,
+              "std": 0.012338800316005412
+            }
+          }
+        },
+        "ablation_fixed_global": {
+          "n": 3,
+          "completed": 3,
+          "failed": 0,
+          "metrics": {
+            "selection_score": {
+              "mean": 0.4330827749505773,
+              "std": 0.06173633581225963
+            },
+            "min_recovery_ratio": {
+              "mean": 0.6227408614423541,
+              "std": 0.0035272684471744017
+            },
+            "critical_load_recovery_ratio": {
+              "mean": 0.8770474592844645,
+              "std": 0.007883700867010318
+            },
+            "constraint_violation_rate_eval": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "invalid_action_rate_eval": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "wait_hold_usage_eval": {
+              "mean": 0.2627492877492878,
+              "std": 0.0031225513129320365
+            },
+            "safety_capacity_index": {
+              "mean": 0.8249259122543865,
+              "std": 0.002457837106590726
+            }
+          }
+        }
+      }
+    },
+    "resource_moderate": {
+      "methods": {
+        "baseline_rl": {
+          "n": 3,
+          "completed": 3,
+          "failed": 0,
+          "metrics": {
+            "selection_score": {
+              "mean": 0.19998188960883354,
+              "std": 0.002042609223046439
+            },
+            "min_recovery_ratio": {
+              "mean": 0.4282876071002748,
+              "std": 0.0015492304502276847
+            },
+            "critical_load_recovery_ratio": {
+              "mean": 0.7991324762503306,
+              "std": 0.0015330818040405912
+            },
+            "constraint_violation_rate_eval": {
+              "mean": 0.24444444444444446,
+              "std": 0.00392837100659193
+            },
+            "invalid_action_rate_eval": {
+              "mean": 0.24444444444444446,
+              "std": 0.00392837100659193
+            },
+            "wait_hold_usage_eval": {
+              "mean": 0.24305555555555555,
+              "std": 0.0019641855032959585
+            },
+            "safety_capacity_index": {
+              "mean": 0.6562636958393785,
+              "std": 0.0022197204243025615
+            }
+          }
+        },
+        "single_shot_llm": {
+          "n": 3,
+          "completed": 3,
+          "failed": 0,
+          "metrics": {
+            "selection_score": {
+              "mean": -333333333.10154384,
+              "std": 471404520.9549316
+            },
+            "min_recovery_ratio": {
+              "mean": 0.3927612900733948,
+              "std": 0.2777241749093385
+            },
+            "critical_load_recovery_ratio": {
+              "mean": 0.6119098166624705,
+              "std": 0.432697472520403
+            },
+            "constraint_violation_rate_eval": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "invalid_action_rate_eval": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "wait_hold_usage_eval": {
+              "mean": 0.2333333333333333,
+              "std": 0.1649915822768611
+            },
+            "safety_capacity_index": {
+              "mean": 0.6516348873575529,
+              "std": 0.2486460165849037
+            }
+          }
+        },
+        "full_outer_loop": {
+          "n": 3,
+          "completed": 3,
+          "failed": 0,
+          "metrics": {
+            "selection_score": {
+              "mean": 0.34349390505419836,
+              "std": 0.006374421311644303
+            },
+            "min_recovery_ratio": {
+              "mean": 0.5891944567362467,
+              "std": 8.576745635994528e-05
+            },
+            "critical_load_recovery_ratio": {
+              "mean": 0.9010915524429746,
+              "std": 0.025406355394587556
+            },
+            "constraint_violation_rate_eval": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "invalid_action_rate_eval": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "wait_hold_usage_eval": {
+              "mean": 0.3499999999999999,
+              "std": 5.551115123125783e-17
+            },
+            "safety_capacity_index": {
+              "mean": 0.8216001032127275,
+              "std": 0.008921464617333529
+            }
+          }
+        },
+        "ablation_fixed_global": {
+          "n": 3,
+          "completed": 3,
+          "failed": 0,
+          "metrics": {
+            "selection_score": {
+              "mean": 0.34349390505419836,
+              "std": 0.006374421311644303
+            },
+            "min_recovery_ratio": {
+              "mean": 0.5891944567362467,
+              "std": 8.576745635994528e-05
+            },
+            "critical_load_recovery_ratio": {
+              "mean": 0.9010915524429746,
+              "std": 0.025406355394587556
+            },
+            "constraint_violation_rate_eval": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "invalid_action_rate_eval": {
+              "mean": 0.0,
+              "std": 0.0
+            },
+            "wait_hold_usage_eval": {
+              "mean": 0.3499999999999999,
+              "std": 5.551115123125783e-17
+            },
+            "safety_capacity_index": {
+              "mean": 0.8216001032127275,
+              "std": 0.008921464617333529
+            }
+          }
+        }
+      }
+    }
+  },
+  "issues": {
+    "hard_failures": [],
+    "severe_issues": [
+      "full_outer_loop_below_baseline_on_selection_and_critical:standard_moderate"
+    ],
+    "affected_pairs": [
+      [
+        "standard_moderate",
+        "full_outer_loop"
+      ]
+    ]
+  },
+  "repair_iterations": 3,
+  "config_path": "config_topic_eval.yaml",
+  "commands_run": [
+    "python run_benchmark_eval.py --mode baseline_rl --seed 42 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/baseline_rl__seed42.json",
+    "python run_benchmark_eval.py --mode baseline_rl --seed 43 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/baseline_rl__seed43.json",
+    "python run_benchmark_eval.py --mode baseline_rl --seed 44 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/baseline_rl__seed44.json",
+    "python run_benchmark_eval.py --mode single_shot_llm --seed 42 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/single_shot_llm__seed42.json",
+    "python run_benchmark_eval.py --mode single_shot_llm --seed 43 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/single_shot_llm__seed43.json",
+    "python run_benchmark_eval.py --mode single_shot_llm --seed 44 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/single_shot_llm__seed44.json",
+    "python run_benchmark_eval.py --mode full_outer_loop --seed 42 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/full_outer_loop__seed42.json",
+    "python run_benchmark_eval.py --mode full_outer_loop --seed 43 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/full_outer_loop__seed43.json",
+    "python run_benchmark_eval.py --mode full_outer_loop --seed 44 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/full_outer_loop__seed44.json",
+    "python run_benchmark_eval.py --mode ablation_fixed_global --seed 42 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/ablation_fixed_global__seed42.json",
+    "python run_benchmark_eval.py --mode ablation_fixed_global --seed 43 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/ablation_fixed_global__seed43.json",
+    "python run_benchmark_eval.py --mode ablation_fixed_global --seed 44 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/ablation_fixed_global__seed44.json",
+    "python run_benchmark_eval.py --mode baseline_rl --seed 42 --reward-mode engineered --split-name benchmark_eval_presets --severity severe --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_severe/baseline_rl__seed42.json",
+    "python run_benchmark_eval.py --mode baseline_rl --seed 43 --reward-mode engineered --split-name benchmark_eval_presets --severity severe --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_severe/baseline_rl__seed43.json",
+    "python run_benchmark_eval.py --mode baseline_rl --seed 44 --reward-mode engineered --split-name benchmark_eval_presets --severity severe --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_severe/baseline_rl__seed44.json",
+    "python run_benchmark_eval.py --mode single_shot_llm --seed 42 --reward-mode engineered --split-name benchmark_eval_presets --severity severe --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_severe/single_shot_llm__seed42.json",
+    "python run_benchmark_eval.py --mode single_shot_llm --seed 43 --reward-mode engineered --split-name benchmark_eval_presets --severity severe --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_severe/single_shot_llm__seed43.json",
+    "python run_benchmark_eval.py --mode single_shot_llm --seed 44 --reward-mode engineered --split-name benchmark_eval_presets --severity severe --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_severe/single_shot_llm__seed44.json",
+    "python run_benchmark_eval.py --mode full_outer_loop --seed 42 --reward-mode engineered --split-name benchmark_eval_presets --severity severe --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_severe/full_outer_loop__seed42.json",
+    "python run_benchmark_eval.py --mode full_outer_loop --seed 43 --reward-mode engineered --split-name benchmark_eval_presets --severity severe --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_severe/full_outer_loop__seed43.json",
+    "python run_benchmark_eval.py --mode full_outer_loop --seed 44 --reward-mode engineered --split-name benchmark_eval_presets --severity severe --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_severe/full_outer_loop__seed44.json",
+    "python run_benchmark_eval.py --mode ablation_fixed_global --seed 42 --reward-mode engineered --split-name benchmark_eval_presets --severity severe --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_severe/ablation_fixed_global__seed42.json",
+    "python run_benchmark_eval.py --mode ablation_fixed_global --seed 43 --reward-mode engineered --split-name benchmark_eval_presets --severity severe --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_severe/ablation_fixed_global__seed43.json",
+    "python run_benchmark_eval.py --mode ablation_fixed_global --seed 44 --reward-mode engineered --split-name benchmark_eval_presets --severity severe --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_severe/ablation_fixed_global__seed44.json",
+    "python run_benchmark_eval.py --mode baseline_rl --seed 42 --reward-mode engineered --split-name benchmark_resource_constrained_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/resource_moderate/baseline_rl__seed42.json",
+    "python run_benchmark_eval.py --mode baseline_rl --seed 43 --reward-mode engineered --split-name benchmark_resource_constrained_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/resource_moderate/baseline_rl__seed43.json",
+    "python run_benchmark_eval.py --mode baseline_rl --seed 44 --reward-mode engineered --split-name benchmark_resource_constrained_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/resource_moderate/baseline_rl__seed44.json",
+    "python run_benchmark_eval.py --mode single_shot_llm --seed 42 --reward-mode engineered --split-name benchmark_resource_constrained_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/resource_moderate/single_shot_llm__seed42.json",
+    "python run_benchmark_eval.py --mode single_shot_llm --seed 43 --reward-mode engineered --split-name benchmark_resource_constrained_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/resource_moderate/single_shot_llm__seed43.json",
+    "python run_benchmark_eval.py --mode single_shot_llm --seed 44 --reward-mode engineered --split-name benchmark_resource_constrained_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/resource_moderate/single_shot_llm__seed44.json",
+    "python run_benchmark_eval.py --mode full_outer_loop --seed 42 --reward-mode engineered --split-name benchmark_resource_constrained_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/resource_moderate/full_outer_loop__seed42.json",
+    "python run_benchmark_eval.py --mode full_outer_loop --seed 43 --reward-mode engineered --split-name benchmark_resource_constrained_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/resource_moderate/full_outer_loop__seed43.json",
+    "python run_benchmark_eval.py --mode full_outer_loop --seed 44 --reward-mode engineered --split-name benchmark_resource_constrained_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/resource_moderate/full_outer_loop__seed44.json",
+    "python run_benchmark_eval.py --mode ablation_fixed_global --seed 42 --reward-mode engineered --split-name benchmark_resource_constrained_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/resource_moderate/ablation_fixed_global__seed42.json",
+    "python run_benchmark_eval.py --mode ablation_fixed_global --seed 43 --reward-mode engineered --split-name benchmark_resource_constrained_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/resource_moderate/ablation_fixed_global__seed43.json",
+    "python run_benchmark_eval.py --mode ablation_fixed_global --seed 44 --reward-mode engineered --split-name benchmark_resource_constrained_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/resource_moderate/ablation_fixed_global__seed44.json",
+    "python run_benchmark_eval.py --mode full_outer_loop --seed 42 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/full_outer_loop__seed42.json",
+    "python run_benchmark_eval.py --mode full_outer_loop --seed 43 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/full_outer_loop__seed43.json",
+    "python run_benchmark_eval.py --mode full_outer_loop --seed 44 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/full_outer_loop__seed44.json",
+    "python run_benchmark_eval.py --mode ablation_fixed_global --seed 42 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/ablation_fixed_global__seed42.json",
+    "python run_benchmark_eval.py --mode ablation_fixed_global --seed 43 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/ablation_fixed_global__seed43.json",
+    "python run_benchmark_eval.py --mode ablation_fixed_global --seed 44 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/ablation_fixed_global__seed44.json",
+    "python run_benchmark_eval.py --mode full_outer_loop --seed 42 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/full_outer_loop__seed42.json",
+    "python run_benchmark_eval.py --mode full_outer_loop --seed 43 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/full_outer_loop__seed43.json",
+    "python run_benchmark_eval.py --mode full_outer_loop --seed 44 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/full_outer_loop__seed44.json",
+    "python run_benchmark_eval.py --mode full_outer_loop --seed 42 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/full_outer_loop__seed42.json",
+    "python run_benchmark_eval.py --mode full_outer_loop --seed 43 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/full_outer_loop__seed43.json",
+    "python run_benchmark_eval.py --mode full_outer_loop --seed 44 --reward-mode engineered --split-name benchmark_eval_presets --severity moderate --eval-budget completion_budget_eval --config config_topic_eval.yaml --out outputs/topic_suite_rerun_20260423/runs/standard_moderate/full_outer_loop__seed44.json"
+  ]
+}
