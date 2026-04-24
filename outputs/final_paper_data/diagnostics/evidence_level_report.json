@@ -1,0 +1,59 @@
+{
+  "entries": [
+    {
+      "scenario": "standard_moderate",
+      "method": "baseline_rl",
+      "evidence_level": "per_seed_n3"
+    },
+    {
+      "scenario": "standard_moderate",
+      "method": "single_shot_llm",
+      "evidence_level": "per_seed_n3"
+    },
+    {
+      "scenario": "standard_moderate",
+      "method": "full_outer_loop",
+      "evidence_level": "per_seed_n3"
+    },
+    {
+      "scenario": "resource_moderate",
+      "method": "baseline_rl",
+      "evidence_level": "per_seed_n3"
+    },
+    {
+      "scenario": "resource_moderate",
+      "method": "single_shot_llm",
+      "evidence_level": "valid_seed_n2"
+    },
+    {
+      "scenario": "resource_moderate",
+      "method": "full_outer_loop",
+      "evidence_level": "per_seed_n3"
+    },
+    {
+      "scenario": "resource_moderate",
+      "method": "ablation_fixed_global",
+      "evidence_level": "aggregate_only_n1"
+    },
+    {
+      "scenario": "standard_severe",
+      "method": "baseline_rl",
+      "evidence_level": "aggregate_only_n1"
+    },
+    {
+      "scenario": "standard_severe",
+      "method": "single_shot_llm",
+      "evidence_level": "aggregate_only_n1"
+    },
+    {
+      "scenario": "standard_severe",
+      "method": "full_outer_loop",
+      "evidence_level": "aggregate_only_n1"
+    },
+    {
+      "scenario": "standard_severe",
+      "method": "ablation_fixed_global",
+      "evidence_level": "aggregate_only_n1"
+    }
+  ]
+}

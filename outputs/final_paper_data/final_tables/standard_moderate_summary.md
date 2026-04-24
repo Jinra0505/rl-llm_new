@@ -1,13 +1,9 @@
 # standard_moderate summary
 
-## Notes
-- Main case uses per-seed files from outputs/final_runs/benchmark_eval_presets, not topic_summary sentinel aggregates.
-- single_shot may have highest aggregate selection_score depending on cleaned means.
-- full_outer_loop should be interpreted as potentially stronger on recovery-floor robustness, zero unsafe decisions, and lower wait usage when supported by data.
-- Do not claim full_outer_loop is best on every metric unless supported by means.
-
-## Method means (valid runs only)
+## Method means (with evidence metadata)
 ### baseline_rl
+- evidence_level: per_seed_n3
+- source_quality_note: Complete 3-seed per-seed evidence.
 - selection_score: 0.362807 ± 0.083465
 - min_recovery_ratio: 0.572852 ± 0.018601
 - critical_load_recovery_ratio: 0.772835 ± 0.046627
@@ -21,6 +17,8 @@
 - eval_success_rate: 0.111111 ± 0.157135
 - safety_capacity_index: 0.754740 ± 0.011933
 ### single_shot_llm
+- evidence_level: per_seed_n3
+- source_quality_note: Complete 3-seed per-seed evidence.
 - selection_score: 0.451309 ± 0.052187
 - min_recovery_ratio: 0.592840 ± 0.051157
 - critical_load_recovery_ratio: 0.771937 ± 0.001794
@@ -34,6 +32,8 @@
 - eval_success_rate: 0.222222 ± 0.157135
 - safety_capacity_index: 0.777672 ± 0.018526
 ### full_outer_loop
+- evidence_level: per_seed_n3
+- source_quality_note: Complete 3-seed per-seed evidence.
 - selection_score: 0.402452 ± 0.062499
 - min_recovery_ratio: 0.650363 ± 0.014845
 - critical_load_recovery_ratio: 0.781504 ± 0.015087

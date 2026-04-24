@@ -53,7 +53,11 @@
           "mean": 0.667306441101763,
           "std": 0.014274875230980663
         }
-      }
+      },
+      "evidence_level": "per_seed_n3",
+      "source_quality_note": "Complete 3-seed per-seed evidence.",
+      "suitable_for_main_text": false,
+      "suitable_for_supplement": true
     },
     "single_shot_llm": {
       "n_total": 3,
@@ -107,7 +111,11 @@
           "mean": 0.8274523310363293,
           "std": 0.0013934992253780143
         }
-      }
+      },
+      "evidence_level": "valid_seed_n2",
+      "source_quality_note": "3 seeds attempted; seed42 is sentinel-invalid and excluded from valid means.",
+      "suitable_for_main_text": false,
+      "suitable_for_supplement": true
     },
     "full_outer_loop": {
       "n_total": 3,
@@ -161,7 +169,11 @@
           "mean": 0.6968428043855561,
           "std": 0.025076893966660393
         }
-      }
+      },
+      "evidence_level": "per_seed_n3",
+      "source_quality_note": "Complete 3-seed per-seed evidence.",
+      "suitable_for_main_text": false,
+      "suitable_for_supplement": true
     },
     "ablation_fixed_global": {
       "n_total": 1,
@@ -180,16 +192,16 @@
           "std": 0.0
         },
         "communication_recovery_ratio": {
-          "mean": 0.0,
-          "std": 0.0
+          "mean": null,
+          "std": null
         },
         "power_recovery_ratio": {
-          "mean": 0.0,
-          "std": 0.0
+          "mean": null,
+          "std": null
         },
         "road_recovery_ratio": {
-          "mean": 0.0,
-          "std": 0.0
+          "mean": null,
+          "std": null
         },
         "constraint_violation_rate_eval": {
           "mean": 0.0,
@@ -204,8 +216,8 @@
           "std": 0.0
         },
         "mean_progress_delta_eval": {
-          "mean": 0.0,
-          "std": 0.0
+          "mean": null,
+          "std": null
         },
         "eval_success_rate": {
           "mean": 0.0,
@@ -215,7 +227,11 @@
           "mean": 0.8216001032127275,
           "std": 0.0
         }
-      }
+      },
+      "evidence_level": "aggregate_only_n1",
+      "source_quality_note": "Aggregate-only source; per-seed files unavailable.",
+      "suitable_for_main_text": false,
+      "suitable_for_supplement": true
     }
   },
   "notes": [

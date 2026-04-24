@@ -53,7 +53,11 @@
           "mean": 0.7547404976189137,
           "std": 0.01193296940279924
         }
-      }
+      },
+      "evidence_level": "per_seed_n3",
+      "source_quality_note": "Complete 3-seed per-seed evidence.",
+      "suitable_for_main_text": true,
+      "suitable_for_supplement": true
     },
     "single_shot_llm": {
       "n_total": 3,
@@ -107,7 +111,11 @@
           "mean": 0.7776720109913084,
           "std": 0.018525948281992697
         }
-      }
+      },
+      "evidence_level": "per_seed_n3",
+      "source_quality_note": "Complete 3-seed per-seed evidence.",
+      "suitable_for_main_text": true,
+      "suitable_for_supplement": true
     },
     "full_outer_loop": {
       "n_total": 3,
@@ -161,7 +169,11 @@
           "mean": 0.8011533874604437,
           "std": 0.008872575700850694
         }
-      }
+      },
+      "evidence_level": "per_seed_n3",
+      "source_quality_note": "Complete 3-seed per-seed evidence.",
+      "suitable_for_main_text": true,
+      "suitable_for_supplement": true
     }
   },
   "notes": [

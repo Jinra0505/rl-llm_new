@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from action_mapping import action_fields
+
 
 def _f(v: Any, default: float = 0.0) -> float:
     try:
@@ -61,8 +63,7 @@ def export_process_data(selected_runs: list[dict[str, Any]], process_dir: Path, 
                         "method": method,
                         "seed": seed,
                         "step": i,
-                        "action": step.get("action", ""),
-                        "action_category": step.get("action_category", ""),
+                        **action_fields(step.get("action")),
                         "progress_delta": _f(step.get("progress_delta", step.get("delta_progress", 0.0))),
                         "stage": step.get("stage", ""),
                         "invalid_action": int(bool(step.get("invalid_action", False))),
@@ -96,8 +97,7 @@ def export_process_data(selected_runs: list[dict[str, Any]], process_dir: Path, 
                         "scenario": scenario,
                         "method": method,
                         "seed": seed,
-                        "action": action,
-                        "action_category": categories.get(action, ""),
+                        **action_fields(action),
                         "usage_rate": _f(usage),
                     }
                 )
@@ -302,14 +302,32 @@ def export_process_data(selected_runs: list[dict[str, Any]], process_dir: Path, 
     _write_csv(
         process_dir / "representative_eval_trace_long.csv",
         rep_rows,
-        ["scenario", "method", "seed", "step", "action", "action_category", "progress_delta", "stage", "invalid_action", "invalid_reason", "constraint_violation"],
+        [
+            "scenario",
+            "method",
+            "seed",
+            "step",
+            "action",
+            "action_name",
+            "action_label",
+            "action_category",
+            "progress_delta",
+            "stage",
+            "invalid_action",
+            "invalid_reason",
+            "constraint_violation",
+        ],
     )
     _write_csv(
         process_dir / "eval_trajectory_summary.csv",
         traj_rows,
         ["scenario", "method", "seed", "mean_steps", "terminated_rate", "truncated_rate", "mean_invalid_action_rate", "mean_constraint_violation_rate", "mean_progress_delta"],
     )
-    _write_csv(process_dir / "action_usage_long.csv", action_rows, ["scenario", "method", "seed", "action", "action_category", "usage_rate"])
+    _write_csv(
+        process_dir / "action_usage_long.csv",
+        action_rows,
+        ["scenario", "method", "seed", "action", "action_name", "action_label", "action_category", "usage_rate"],
+    )
     _write_csv(process_dir / "stage_distribution_long.csv", stage_rows, ["scenario", "method", "seed", "stage", "usage_rate"])
     _write_csv(
         process_dir / "resource_end_summary.csv",
