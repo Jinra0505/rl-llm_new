@@ -1,0 +1,29 @@
+{
+  "keys_compared": [
+    "selection_score",
+    "min_recovery_ratio",
+    "critical_load_recovery_ratio",
+    "constraint_violation_rate_eval",
+    "invalid_action_rate_eval",
+    "wait_hold_usage_eval",
+    "safety_capacity_index"
+  ],
+  "absolute_differences": {
+    "selection_score": 0.08262892563696261,
+    "min_recovery_ratio": 0.13244108690155876,
+    "critical_load_recovery_ratio": 0.22400833831893074,
+    "constraint_violation_rate_eval": 0.0,
+    "invalid_action_rate_eval": 0.0,
+    "wait_hold_usage_eval": 0.009259259259259356,
+    "safety_capacity_index": 0.12475729882717135
+  },
+  "numerically_identical": false,
+  "full_sources": [
+    "outputs/resource_constrained_validation_20260418_final/outer_loop_runs/run_20260419_002853",
+    "outputs/resource_constrained_validation_20260418_final/outer_loop_runs/run_20260419_003417",
+    "outputs/resource_constrained_validation_20260418_final/outer_loop_runs/run_20260419_004023"
+  ],
+  "ablation_sources": [
+    ""
+  ]
+}

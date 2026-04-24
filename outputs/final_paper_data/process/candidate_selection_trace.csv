@@ -1,0 +1,7 @@
+scenario,method,seed,round,candidate_id,candidate_origin,valid,selected,rejected,rejection_reasons,selection_score,min_recovery_ratio,critical_load_recovery_ratio,constraint_violation_rate_eval,invalid_action_rate_eval,wait_hold_usage_eval
+resource_moderate,single_shot_llm,43,1,r1_anchor,deterministic_safe_anchor,1,0,0,,0.3466911071737607,0.5890894134839376,0.9139358202616373,0.0,0.0,0.35
+resource_moderate,single_shot_llm,43,1,r1_backstop,deterministic_safe_backstop,1,0,0,,0.19728141181667647,0.4265011250972748,0.7975497444470724,0.25,0.25,0.24166666666666667
+resource_moderate,single_shot_llm,43,1,r1_c1,generated,1,0,1,probe_invalid_too_high|probe_violation_too_high,-1000000000.0,0.0,0.0,0.0,0.0,0.0
+resource_moderate,single_shot_llm,44,1,r1_anchor,deterministic_safe_anchor,1,0,0,,0.1971102918883165,0.4263051748275757,0.7970233758290609,0.25,0.25,0.24166666666666667
+resource_moderate,single_shot_llm,44,1,r1_backstop,deterministic_safe_backstop,1,0,0,,0.34867744902769726,0.5891944567362467,0.9217936297257742,0.0,0.0,0.35
+resource_moderate,single_shot_llm,44,1,r1_c1,generated,1,0,1,probe_invalid_too_high|probe_violation_too_high,-1000000000.0,0.0,0.0,0.0,0.0,0.0
