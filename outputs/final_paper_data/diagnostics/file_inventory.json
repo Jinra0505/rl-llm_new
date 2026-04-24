@@ -1,0 +1,59 @@
+{
+  "inventory": {
+    "topic_summary_json": [
+      "outputs/topic_suite_rerun_20260423/topic_summary.json"
+    ],
+    "topic_summary_md": [
+      "outputs/topic_suite_rerun_20260423/topic_summary.md"
+    ],
+    "summary_json": [
+      "outputs/final_runs/benchmark_eval_presets/summary.json",
+      "reports/benchmark_eval_presets/summary.json"
+    ],
+    "baseline_seed_files": [
+      "outputs/final_runs/benchmark_eval_presets/baseline_rl__seed42.json",
+      "reports/benchmark_eval_presets/baseline_rl__seed42.json",
+      "outputs/final_runs/benchmark_eval_presets/baseline_rl__seed43.json",
+      "reports/benchmark_eval_presets/baseline_rl__seed43.json",
+      "outputs/final_runs/benchmark_eval_presets/baseline_rl__seed44.json",
+      "reports/benchmark_eval_presets/baseline_rl__seed44.json"
+    ],
+    "single_seed_files": [
+      "outputs/final_runs/benchmark_eval_presets/single_shot_llm__seed42.json",
+      "reports/benchmark_eval_presets/single_shot_llm__seed42.json",
+      "outputs/final_runs/benchmark_eval_presets/single_shot_llm__seed43.json",
+      "reports/benchmark_eval_presets/single_shot_llm__seed43.json",
+      "outputs/final_runs/benchmark_eval_presets/single_shot_llm__seed44.json",
+      "reports/benchmark_eval_presets/single_shot_llm__seed44.json"
+    ],
+    "full_seed_files": [
+      "outputs/final_runs/benchmark_eval_presets/full_outer_loop__seed42.json",
+      "reports/benchmark_eval_presets/full_outer_loop__seed42.json",
+      "outputs/final_runs/benchmark_eval_presets/full_outer_loop__seed43.json",
+      "reports/benchmark_eval_presets/full_outer_loop__seed43.json",
+      "outputs/final_runs/benchmark_eval_presets/full_outer_loop__seed44.json",
+      "reports/benchmark_eval_presets/full_outer_loop__seed44.json"
+    ],
+    "topic_suite_runs_dir_exists": false,
+    "topic_suite_runs_dir": "outputs/topic_suite_rerun_20260423/runs"
+  },
+  "selected_standard_moderate_main_case_files": [
+    "outputs/final_runs/benchmark_eval_presets/baseline_rl__seed42.json",
+    "outputs/final_runs/benchmark_eval_presets/baseline_rl__seed43.json",
+    "outputs/final_runs/benchmark_eval_presets/baseline_rl__seed44.json",
+    "outputs/final_runs/benchmark_eval_presets/single_shot_llm__seed42.json",
+    "outputs/final_runs/benchmark_eval_presets/single_shot_llm__seed43.json",
+    "outputs/final_runs/benchmark_eval_presets/single_shot_llm__seed44.json",
+    "outputs/final_runs/benchmark_eval_presets/full_outer_loop__seed42.json",
+    "outputs/final_runs/benchmark_eval_presets/full_outer_loop__seed43.json",
+    "outputs/final_runs/benchmark_eval_presets/full_outer_loop__seed44.json"
+  ],
+  "topic_summary_has_sentinel_neg_1e9": true,
+  "resource_moderate_single_shot_requires_rerun": true,
+  "resource_moderate_single_shot_rerun_seeds": [
+    "seed42",
+    "seed43",
+    "seed44"
+  ],
+  "missing_required_files": []
+}

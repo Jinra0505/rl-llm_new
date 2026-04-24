@@ -1,0 +1,63 @@
+{
+  "standard_moderate_main_case_files": [
+    "outputs/final_runs/benchmark_eval_presets/baseline_rl__seed42.json",
+    "outputs/final_runs/benchmark_eval_presets/baseline_rl__seed43.json",
+    "outputs/final_runs/benchmark_eval_presets/baseline_rl__seed44.json",
+    "outputs/final_runs/benchmark_eval_presets/single_shot_llm__seed42.json",
+    "outputs/final_runs/benchmark_eval_presets/single_shot_llm__seed43.json",
+    "outputs/final_runs/benchmark_eval_presets/single_shot_llm__seed44.json",
+    "outputs/final_runs/benchmark_eval_presets/full_outer_loop__seed42.json",
+    "outputs/final_runs/benchmark_eval_presets/full_outer_loop__seed43.json",
+    "outputs/final_runs/benchmark_eval_presets/full_outer_loop__seed44.json"
+  ],
+  "standard_severe_supplement_files": [
+    "outputs/topic_suite_rerun_20260423/topic_summary.json",
+    "outputs/topic_suite_rerun_20260423/topic_summary.json",
+    "outputs/topic_suite_rerun_20260423/topic_summary.json",
+    "outputs/topic_suite_rerun_20260423/topic_summary.json"
+  ],
+  "resource_moderate_supplement_files": [
+    "outputs/resource_constrained_validation_20260418_final/baseline_rl__engineered__benchmark_resource_constrained_presets__seed42.json",
+    "outputs/resource_constrained_validation_20260418_final/baseline_rl__engineered__benchmark_resource_constrained_presets__seed43.json",
+    "outputs/resource_constrained_validation_20260418_final/baseline_rl__engineered__benchmark_resource_constrained_presets__seed44.json",
+    "outputs/resource_constrained_validation_20260418_final/full_outer_loop__engineered__benchmark_resource_constrained_presets__seed42.json",
+    "outputs/resource_constrained_validation_20260418_final/full_outer_loop__engineered__benchmark_resource_constrained_presets__seed43.json",
+    "outputs/resource_constrained_validation_20260418_final/full_outer_loop__engineered__benchmark_resource_constrained_presets__seed44.json",
+    "outputs/final_paper_data/reruns/resource_moderate/single_shot_llm__seed42.json",
+    "outputs/final_paper_data/reruns/resource_moderate/single_shot_llm__seed43.json",
+    "outputs/final_paper_data/reruns/resource_moderate/single_shot_llm__seed44.json",
+    "outputs/topic_suite_rerun_20260423/topic_summary.json"
+  ],
+  "rerun_files": [
+    "outputs/final_paper_data/reruns/resource_moderate/single_shot_llm__seed42.json",
+    "outputs/final_paper_data/reruns/resource_moderate/single_shot_llm__seed43.json",
+    "outputs/final_paper_data/reruns/resource_moderate/single_shot_llm__seed44.json"
+  ],
+  "excluded_files": [
+    {
+      "scenario": "resource_moderate",
+      "method": "single_shot_llm",
+      "seed": 42,
+      "path": "outputs/final_paper_data/reruns/resource_moderate/single_shot_llm__seed42.json",
+      "reason": "sentinel_or_invalid"
+    }
+  ],
+  "process_exports": {
+    "representative_eval_trace_rows": 222,
+    "eval_trajectory_rows": 17,
+    "action_usage_rows": 255,
+    "stage_distribution_rows": 25,
+    "resource_end_rows": 17,
+    "zone_layer_rows": 204,
+    "reward_rows": 442,
+    "per_preset_rows": 0,
+    "outer_loop_round_rows": 2,
+    "candidate_trace_rows": 6,
+    "routing_rows": 2,
+    "llm_rows": 2
+  },
+  "process_items_unavailable": [
+    "per_preset_metrics_unavailable.md",
+    "outer_loop_traces_unavailable.md"
+  ]
+}

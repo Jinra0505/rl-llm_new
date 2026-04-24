@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import argparse
 import json
 import math
 import subprocess
@@ -285,7 +286,11 @@ def apply_repair_profile(config_path: Path, iteration: int) -> None:
 
 
 def main() -> None:
-    root = Path("outputs/topic_suite")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output-root", default="outputs/topic_suite")
+    args = parser.parse_args()
+
+    root = Path(args.output_root)
     runs_root = root / "runs"
     runs_root.mkdir(parents=True, exist_ok=True)
     cfg_path = ensure_topic_config(Path("config_topic_eval.yaml"))
@@ -294,17 +299,22 @@ def main() -> None:
     commands_run: list[str] = []
     repair_iterations = 0
 
-    def run_pairs(pairs: list[tuple[str, str]] | None = None) -> None:
+    def run_pairs(
+        pairs: list[tuple[str, str]] | None = None,
+        force_rerun_pairs: list[tuple[str, str]] | None = None,
+    ) -> None:
         pairs_set = set(pairs or [(s, m) for s in SCENARIOS for m in METHODS])
+        force_set = set(force_rerun_pairs or [])
         for scenario in SCENARIOS:
             scenario_dir = runs_root / scenario
             scenario_dir.mkdir(parents=True, exist_ok=True)
             for method in METHODS:
                 if (scenario, method) not in pairs_set:
                     continue
+                force_rerun = (scenario, method) in force_set
                 for seed in SEEDS:
                     out = scenario_dir / f"{method}__seed{seed}.json"
-                    if out.exists():
+                    if out.exists() and not force_rerun:
                         try:
                             data = json.loads(out.read_text(encoding="utf-8"))
                             data["safety_capacity_index"] = _safety_capacity_index(data)
@@ -326,7 +336,7 @@ def main() -> None:
         repair_iterations += 1
         apply_repair_profile(cfg_path, repair_iterations)
         affected = [tuple(x) for x in issues.get("affected_pairs", [])] if issues.get("affected_pairs") else None
-        run_pairs(affected)
+        run_pairs(affected, force_rerun_pairs=affected)
         summary = aggregate(all_runs)
         issues = detect_issues(all_runs, summary)
 

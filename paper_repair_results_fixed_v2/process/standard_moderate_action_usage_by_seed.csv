@@ -1,0 +1,136 @@
+scenario,method,seed,action,action_name,action_label,action_category,usage_rate
+standard_moderate,baseline_rl,42,0,road_A,Road repair A,road,0.08029197080291971
+standard_moderate,baseline_rl,42,1,road_B,Road repair B,road,0.04927007299270073
+standard_moderate,baseline_rl,42,2,road_C,Road repair C,road,0.07664233576642336
+standard_moderate,baseline_rl,42,3,power_A,Power repair A,power,0.058394160583941604
+standard_moderate,baseline_rl,42,4,power_B,Power repair B,power,0.041970802919708027
+standard_moderate,baseline_rl,42,5,power_C,Power repair C,power,0.051094890510948905
+standard_moderate,baseline_rl,42,6,comm_A,Communication repair A,communication,0.09671532846715329
+standard_moderate,baseline_rl,42,7,comm_B,Communication repair B,communication,0.08211678832116788
+standard_moderate,baseline_rl,42,8,comm_C,Communication repair C,communication,0.08941605839416059
+standard_moderate,baseline_rl,42,9,mes_to_A,Mobile energy to A,mobile_energy,0.03832116788321168
+standard_moderate,baseline_rl,42,10,mes_to_B,Mobile energy to B,mobile_energy,0.03102189781021898
+standard_moderate,baseline_rl,42,11,mes_to_C,Mobile energy to C,mobile_energy,0.04562043795620438
+standard_moderate,baseline_rl,42,12,feeder_reconfigure,Feeder reconfiguration,feeder,0.03102189781021898
+standard_moderate,baseline_rl,42,13,coordinated_balanced,Coordinated restoration,coordinated,0.03832116788321168
+standard_moderate,baseline_rl,42,14,wait_hold,Wait / hold,wait,0.1897810218978102
+standard_moderate,baseline_rl,43,0,road_A,Road repair A,road,0.07815275310834814
+standard_moderate,baseline_rl,43,1,road_B,Road repair B,road,0.06394316163410302
+standard_moderate,baseline_rl,43,2,road_C,Road repair C,road,0.06571936056838366
+standard_moderate,baseline_rl,43,3,power_A,Power repair A,power,0.05328596802841918
+standard_moderate,baseline_rl,43,4,power_B,Power repair B,power,0.037300177619893425
+standard_moderate,baseline_rl,43,5,power_C,Power repair C,power,0.046181172291296625
+standard_moderate,baseline_rl,43,6,comm_A,Communication repair A,communication,0.09591474245115453
+standard_moderate,baseline_rl,43,7,comm_B,Communication repair B,communication,0.07992895204262877
+standard_moderate,baseline_rl,43,8,comm_C,Communication repair C,communication,0.11367673179396093
+standard_moderate,baseline_rl,43,9,mes_to_A,Mobile energy to A,mobile_energy,0.047957371225577264
+standard_moderate,baseline_rl,43,10,mes_to_B,Mobile energy to B,mobile_energy,0.03374777975133215
+standard_moderate,baseline_rl,43,11,mes_to_C,Mobile energy to C,mobile_energy,0.03907637655417407
+standard_moderate,baseline_rl,43,12,feeder_reconfigure,Feeder reconfiguration,feeder,0.03019538188277087
+standard_moderate,baseline_rl,43,13,coordinated_balanced,Coordinated restoration,coordinated,0.03374777975133215
+standard_moderate,baseline_rl,43,14,wait_hold,Wait / hold,wait,0.1811722912966252
+standard_moderate,baseline_rl,44,0,road_A,Road repair A,road,0.08163265306122448
+standard_moderate,baseline_rl,44,1,road_B,Road repair B,road,0.059369202226345084
+standard_moderate,baseline_rl,44,2,road_C,Road repair C,road,0.07050092764378478
+standard_moderate,baseline_rl,44,3,power_A,Power repair A,power,0.04823747680890538
+standard_moderate,baseline_rl,44,4,power_B,Power repair B,power,0.05194805194805195
+standard_moderate,baseline_rl,44,5,power_C,Power repair C,power,0.055658627087198514
+standard_moderate,baseline_rl,44,6,comm_A,Communication repair A,communication,0.08905380333951762
+standard_moderate,baseline_rl,44,7,comm_B,Communication repair B,communication,0.07050092764378478
+standard_moderate,baseline_rl,44,8,comm_C,Communication repair C,communication,0.08905380333951762
+standard_moderate,baseline_rl,44,9,mes_to_A,Mobile energy to A,mobile_energy,0.04267161410018553
+standard_moderate,baseline_rl,44,10,mes_to_B,Mobile energy to B,mobile_energy,0.03525046382189239
+standard_moderate,baseline_rl,44,11,mes_to_C,Mobile energy to C,mobile_energy,0.05194805194805195
+standard_moderate,baseline_rl,44,12,feeder_reconfigure,Feeder reconfiguration,feeder,0.02411873840445269
+standard_moderate,baseline_rl,44,13,coordinated_balanced,Coordinated restoration,coordinated,0.04081632653061224
+standard_moderate,baseline_rl,44,14,wait_hold,Wait / hold,wait,0.18923933209647495
+standard_moderate,single_shot_llm,42,0,road_A,Road repair A,road,0.06007067137809187
+standard_moderate,single_shot_llm,42,1,road_B,Road repair B,road,0.0353356890459364
+standard_moderate,single_shot_llm,42,2,road_C,Road repair C,road,0.04063604240282685
+standard_moderate,single_shot_llm,42,3,power_A,Power repair A,power,0.0636042402826855
+standard_moderate,single_shot_llm,42,4,power_B,Power repair B,power,0.045936395759717315
+standard_moderate,single_shot_llm,42,5,power_C,Power repair C,power,0.06537102473498234
+standard_moderate,single_shot_llm,42,6,comm_A,Communication repair A,communication,0.10424028268551237
+standard_moderate,single_shot_llm,42,7,comm_B,Communication repair B,communication,0.0812720848056537
+standard_moderate,single_shot_llm,42,8,comm_C,Communication repair C,communication,0.10070671378091872
+standard_moderate,single_shot_llm,42,9,mes_to_A,Mobile energy to A,mobile_energy,0.04240282685512368
+standard_moderate,single_shot_llm,42,10,mes_to_B,Mobile energy to B,mobile_energy,0.05653710247349823
+standard_moderate,single_shot_llm,42,11,mes_to_C,Mobile energy to C,mobile_energy,0.05830388692579505
+standard_moderate,single_shot_llm,42,12,feeder_reconfigure,Feeder reconfiguration,feeder,0.0353356890459364
+standard_moderate,single_shot_llm,42,13,coordinated_balanced,Coordinated restoration,coordinated,0.04063604240282685
+standard_moderate,single_shot_llm,42,14,wait_hold,Wait / hold,wait,0.1696113074204947
+standard_moderate,single_shot_llm,43,0,road_A,Road repair A,road,0.0998185117967332
+standard_moderate,single_shot_llm,43,1,road_B,Road repair B,road,0.050816696914700546
+standard_moderate,single_shot_llm,43,2,road_C,Road repair C,road,0.045372050816696916
+standard_moderate,single_shot_llm,43,3,power_A,Power repair A,power,0.04900181488203267
+standard_moderate,single_shot_llm,43,4,power_B,Power repair B,power,0.038112522686025406
+standard_moderate,single_shot_llm,43,5,power_C,Power repair C,power,0.05989110707803993
+standard_moderate,single_shot_llm,43,6,comm_A,Communication repair A,communication,0.0852994555353902
+standard_moderate,single_shot_llm,43,7,comm_B,Communication repair B,communication,0.09437386569872959
+standard_moderate,single_shot_llm,43,8,comm_C,Communication repair C,communication,0.1161524500907441
+standard_moderate,single_shot_llm,43,9,mes_to_A,Mobile energy to A,mobile_energy,0.036297640653357534
+standard_moderate,single_shot_llm,43,10,mes_to_B,Mobile energy to B,mobile_energy,0.041742286751361164
+standard_moderate,single_shot_llm,43,11,mes_to_C,Mobile energy to C,mobile_energy,0.04900181488203267
+standard_moderate,single_shot_llm,43,12,feeder_reconfigure,Feeder reconfiguration,feeder,0.018148820326678767
+standard_moderate,single_shot_llm,43,13,coordinated_balanced,Coordinated restoration,coordinated,0.034482758620689655
+standard_moderate,single_shot_llm,43,14,wait_hold,Wait / hold,wait,0.18148820326678766
+standard_moderate,single_shot_llm,44,0,road_A,Road repair A,road,0.07513416815742398
+standard_moderate,single_shot_llm,44,1,road_B,Road repair B,road,0.055456171735241505
+standard_moderate,single_shot_llm,44,2,road_C,Road repair C,road,0.07871198568872988
+standard_moderate,single_shot_llm,44,3,power_A,Power repair A,power,0.04114490161001789
+standard_moderate,single_shot_llm,44,4,power_B,Power repair B,power,0.06976744186046512
+standard_moderate,single_shot_llm,44,5,power_C,Power repair C,power,0.06082289803220036
+standard_moderate,single_shot_llm,44,6,comm_A,Communication repair A,communication,0.1037567084078712
+standard_moderate,single_shot_llm,44,7,comm_B,Communication repair B,communication,0.08228980322003578
+standard_moderate,single_shot_llm,44,8,comm_C,Communication repair C,communication,0.09123434704830054
+standard_moderate,single_shot_llm,44,9,mes_to_A,Mobile energy to A,mobile_energy,0.046511627906976744
+standard_moderate,single_shot_llm,44,10,mes_to_B,Mobile energy to B,mobile_energy,0.03577817531305903
+standard_moderate,single_shot_llm,44,11,mes_to_C,Mobile energy to C,mobile_energy,0.023255813953488372
+standard_moderate,single_shot_llm,44,12,feeder_reconfigure,Feeder reconfiguration,feeder,0.026833631484794274
+standard_moderate,single_shot_llm,44,13,coordinated_balanced,Coordinated restoration,coordinated,0.03041144901610018
+standard_moderate,single_shot_llm,44,14,wait_hold,Wait / hold,wait,0.17889087656529518
+standard_moderate,full_outer_loop,42,0,road_A,Road repair A,road,0.07478260869565218
+standard_moderate,full_outer_loop,42,1,road_B,Road repair B,road,0.06608695652173913
+standard_moderate,full_outer_loop,42,2,road_C,Road repair C,road,0.07478260869565218
+standard_moderate,full_outer_loop,42,3,power_A,Power repair A,power,0.03826086956521739
+standard_moderate,full_outer_loop,42,4,power_B,Power repair B,power,0.05217391304347826
+standard_moderate,full_outer_loop,42,5,power_C,Power repair C,power,0.050434782608695654
+standard_moderate,full_outer_loop,42,6,comm_A,Communication repair A,communication,0.12
+standard_moderate,full_outer_loop,42,7,comm_B,Communication repair B,communication,0.0817391304347826
+standard_moderate,full_outer_loop,42,8,comm_C,Communication repair C,communication,0.09217391304347826
+standard_moderate,full_outer_loop,42,9,mes_to_A,Mobile energy to A,mobile_energy,0.036521739130434785
+standard_moderate,full_outer_loop,42,10,mes_to_B,Mobile energy to B,mobile_energy,0.03826086956521739
+standard_moderate,full_outer_loop,42,11,mes_to_C,Mobile energy to C,mobile_energy,0.050434782608695654
+standard_moderate,full_outer_loop,42,12,feeder_reconfigure,Feeder reconfiguration,feeder,0.04
+standard_moderate,full_outer_loop,42,13,coordinated_balanced,Coordinated restoration,coordinated,0.017391304347826087
+standard_moderate,full_outer_loop,42,14,wait_hold,Wait / hold,wait,0.16695652173913045
+standard_moderate,full_outer_loop,43,0,road_A,Road repair A,road,0.0998185117967332
+standard_moderate,full_outer_loop,43,1,road_B,Road repair B,road,0.050816696914700546
+standard_moderate,full_outer_loop,43,2,road_C,Road repair C,road,0.045372050816696916
+standard_moderate,full_outer_loop,43,3,power_A,Power repair A,power,0.04900181488203267
+standard_moderate,full_outer_loop,43,4,power_B,Power repair B,power,0.038112522686025406
+standard_moderate,full_outer_loop,43,5,power_C,Power repair C,power,0.05989110707803993
+standard_moderate,full_outer_loop,43,6,comm_A,Communication repair A,communication,0.0852994555353902
+standard_moderate,full_outer_loop,43,7,comm_B,Communication repair B,communication,0.09437386569872959
+standard_moderate,full_outer_loop,43,8,comm_C,Communication repair C,communication,0.1161524500907441
+standard_moderate,full_outer_loop,43,9,mes_to_A,Mobile energy to A,mobile_energy,0.036297640653357534
+standard_moderate,full_outer_loop,43,10,mes_to_B,Mobile energy to B,mobile_energy,0.041742286751361164
+standard_moderate,full_outer_loop,43,11,mes_to_C,Mobile energy to C,mobile_energy,0.04900181488203267
+standard_moderate,full_outer_loop,43,12,feeder_reconfigure,Feeder reconfiguration,feeder,0.018148820326678767
+standard_moderate,full_outer_loop,43,13,coordinated_balanced,Coordinated restoration,coordinated,0.034482758620689655
+standard_moderate,full_outer_loop,43,14,wait_hold,Wait / hold,wait,0.18148820326678766
+standard_moderate,full_outer_loop,44,0,road_A,Road repair A,road,0.07513416815742398
+standard_moderate,full_outer_loop,44,1,road_B,Road repair B,road,0.055456171735241505
+standard_moderate,full_outer_loop,44,2,road_C,Road repair C,road,0.07871198568872988
+standard_moderate,full_outer_loop,44,3,power_A,Power repair A,power,0.04114490161001789
+standard_moderate,full_outer_loop,44,4,power_B,Power repair B,power,0.06976744186046512
+standard_moderate,full_outer_loop,44,5,power_C,Power repair C,power,0.06082289803220036
+standard_moderate,full_outer_loop,44,6,comm_A,Communication repair A,communication,0.1037567084078712
+standard_moderate,full_outer_loop,44,7,comm_B,Communication repair B,communication,0.08228980322003578
+standard_moderate,full_outer_loop,44,8,comm_C,Communication repair C,communication,0.09123434704830054
+standard_moderate,full_outer_loop,44,9,mes_to_A,Mobile energy to A,mobile_energy,0.046511627906976744
+standard_moderate,full_outer_loop,44,10,mes_to_B,Mobile energy to B,mobile_energy,0.03577817531305903
+standard_moderate,full_outer_loop,44,11,mes_to_C,Mobile energy to C,mobile_energy,0.023255813953488372
+standard_moderate,full_outer_loop,44,12,feeder_reconfigure,Feeder reconfiguration,feeder,0.026833631484794274
+standard_moderate,full_outer_loop,44,13,coordinated_balanced,Coordinated restoration,coordinated,0.03041144901610018
+standard_moderate,full_outer_loop,44,14,wait_hold,Wait / hold,wait,0.17889087656529518

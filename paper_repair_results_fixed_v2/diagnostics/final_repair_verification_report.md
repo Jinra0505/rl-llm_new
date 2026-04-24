@@ -1,0 +1,14 @@
+# final_repair_verification_report
+
+{
+  "resource_seed42_repaired": true,
+  "resource_seed42_included_if_repaired": true,
+  "no_summary_sentinel": true,
+  "standard_severe_has_per_seed_outputs": true,
+  "standard_moderate_step_rows_gt_zero": true,
+  "figure_ready_schema_ok": true,
+  "action_categories_complete_for_known_actions": true,
+  "all_csv_readable": true,
+  "all_json_parseable": true,
+  "no_binary_files": true
+}

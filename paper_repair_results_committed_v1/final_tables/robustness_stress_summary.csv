@@ -1,0 +1,12 @@
+scenario,method,n_total,n_valid,evidence_level,min_recovery_ratio,critical_load_recovery_ratio,invalid_action_rate_eval,constraint_violation_rate_eval,safety_capacity_index,source_quality_note
+standard_moderate,baseline_rl,3,3,per_seed_n3,0.5728520866897371,0.7728350493643019,0.05416666666666667,0.05416666666666667,0.7547404976189137,Complete 3-seed per-seed evidence.
+standard_moderate,single_shot_llm,3,3,per_seed_n3,0.5928403900729285,0.7719367841879526,0.0,0.0,0.7776720109913084,Complete 3-seed per-seed evidence.
+standard_moderate,full_outer_loop,3,3,per_seed_n3,0.6503631704383426,0.7815036508772109,0.0,0.0,0.8011533874604437,Complete 3-seed per-seed evidence.
+resource_moderate,baseline_rl,3,3,per_seed_n3,0.4317491551240285,0.6557930575476753,0.044444444444444446,0.044444444444444446,0.667306441101763,Complete 3-seed per-seed evidence.
+resource_moderate,single_shot_llm,3,2,valid_seed_n2,0.5891419351100922,0.9178647249937057,0.0,0.0,0.8274523310363293,3 seeds attempted; seed42 is sentinel-invalid and excluded from valid means.
+resource_moderate,full_outer_loop,3,3,per_seed_n3,0.45675336983468795,0.6770832141240438,0.0,0.0,0.6968428043855561,Complete 3-seed per-seed evidence.
+resource_moderate,ablation_fixed_global,1,1,aggregate_only_n1,0.5891944567362467,0.9010915524429746,0.0,0.0,0.8216001032127275,Aggregate-only source; per-seed files unavailable.
+standard_severe,baseline_rl,1,1,aggregate_only_n1,0.5867565506034428,0.8495023283693525,0.08055555555555556,0.08055555555555556,0.7785239409738117,Aggregate-only source; per-seed files unavailable.
+standard_severe,single_shot_llm,1,1,aggregate_only_n1,0.6191268596384261,0.8685031467013888,0.0,0.0,0.8206705022189352,Aggregate-only source; per-seed files unavailable.
+standard_severe,full_outer_loop,1,1,aggregate_only_n1,0.6171037091149224,0.8640084432231054,0.0,0.0,0.8183892533183098,Aggregate-only source; per-seed files unavailable.
+standard_severe,ablation_fixed_global,1,1,aggregate_only_n1,0.6227408614423541,0.8770474592844645,0.0,0.0,0.8249259122543865,Aggregate-only source; per-seed files unavailable.

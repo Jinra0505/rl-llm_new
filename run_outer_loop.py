@@ -5,6 +5,7 @@ import ast
 import importlib.util
 import json
 import logging
+import math
 import os
 import shutil
 import time
@@ -979,12 +980,23 @@ def _extract_phase_contract(
         resource_floor_target = float(np.clip(resource_floor_target, 0.12, 0.15))
         completion_push_allowed = True
         late_stage_trigger = float(np.clip(late_stage_trigger, 0.65, 0.70))
+        benchmark_severity = str((cfg or {}).get("benchmark", {}).get("fixed_severity", (cfg or {}).get("scenario", {}).get("severity", "moderate"))).strip().lower()
         prev_truncated = int(_safe_float((previous_metrics or {}).get("eval_truncated_count", 0.0))) > 0
         low_late_finish = _safe_float((previous_metrics or {}).get("late_finish_action_share_eval", 1.0)) < 0.20
+        completion_window_entries = _safe_float((previous_metrics or {}).get("completion_window_entries", 0.0))
+        prev_min_recovery = _safe_float((previous_metrics or {}).get("min_recovery_ratio", 0.0))
+        prev_critical_recovery = _safe_float((previous_metrics or {}).get("critical_load_recovery_ratio", 0.0))
+        rep = (previous_metrics or {}).get("representative_eval_summary", {})
+        final_stage = str(rep.get("final_stage", "")).strip().lower() if isinstance(rep, dict) else ""
+        near_finish_evidence = completion_window_entries >= 2.0 and (
+            prev_min_recovery >= 0.80 or prev_critical_recovery >= 0.80 or final_stage == "late"
+        )
         if prev_truncated and low_late_finish:
-            default_mode = "late_finish"
-        elif default_mode in {"resource_preserve", "balanced_progress"}:
-            default_mode = "late_finish"
+            if benchmark_severity == "moderate":
+                if near_finish_evidence:
+                    default_mode = "late_finish"
+            else:
+                default_mode = "late_finish"
     return {
         "phase_mode": default_mode,
         "phase_duration": duration,
@@ -1233,6 +1245,20 @@ def _probe_generated_candidate(
     ref_invalid = _safe_float(reference_metrics.get("invalid_action_rate_eval", reference_metrics.get("invalid_action_rate", 0.0)))
     ref_violation = _safe_float(reference_metrics.get("constraint_violation_rate_eval", 0.0))
     ref_min_recovery = _safe_float(reference_metrics.get("min_recovery_ratio", 0.0))
+    bench_cfg = cfg.get("benchmark", {}) if isinstance(cfg.get("benchmark"), dict) else {}
+    split_name = str(bench_cfg.get("split_name", "")).strip().lower()
+    severity = str(bench_cfg.get("fixed_severity", cfg.get("scenario", {}).get("severity", "moderate"))).strip().lower()
+    invalid_tol = 0.02
+    violation_tol = 0.02
+    recovery_drop_tol = 0.05
+    if severity == "severe":
+        invalid_tol = 0.05
+        violation_tol = 0.05
+        recovery_drop_tol = 0.08
+    elif split_name == "benchmark_resource_constrained_presets" and severity == "moderate":
+        invalid_tol = 0.03
+        violation_tol = 0.03
+        recovery_drop_tol = 0.06
     invalid = _safe_float(probe_metrics.get("invalid_action_rate_eval", probe_metrics.get("invalid_action_rate", 1.0)))
     violation = _safe_float(probe_metrics.get("constraint_violation_rate_eval", 1.0))
     wait_hold = _safe_float(probe_metrics.get("wait_hold_usage_eval", probe_metrics.get("wait_hold_usage", 1.0)))
@@ -1240,11 +1266,11 @@ def _probe_generated_candidate(
     mat_end = _safe_float(probe_metrics.get("material_stock_end_mean", probe_metrics.get("material_stock_mean_end", 1.0)))
     progress = _safe_float(probe_metrics.get("mean_progress_delta_eval", probe_metrics.get("mean_progress_delta", 0.0)))
     late_finish = _safe_float(probe_metrics.get("late_finish_action_share_eval", 0.0))
-    if invalid > (ref_invalid + 0.25):
+    if invalid > (ref_invalid + invalid_tol):
         reasons.append("probe_invalid_too_high")
-    if violation > (ref_violation + 0.25):
+    if violation > (ref_violation + violation_tol):
         reasons.append("probe_violation_too_high")
-    if min_recovery < (ref_min_recovery - 0.15):
+    if min_recovery < (ref_min_recovery - recovery_drop_tol):
         reasons.append("probe_recovery_floor_too_low")
     if wait_hold > 0.70:
         reasons.append("probe_wait_overuse")
@@ -1299,6 +1325,19 @@ def select_best_candidate(
     ref_invalid = _safe_float(reference_metrics.get("invalid_action_rate_eval", reference_metrics.get("invalid_action_rate", 1.0)), default=1.0)
     prev_min_recovery = _safe_float(previous_best.get("metrics", {}).get("min_recovery_ratio", 0.0)) if previous_best else 0.0
     ref_min_recovery = _safe_float(reference_metrics.get("min_recovery_ratio", 0.0))
+    split_name = str(reference_metrics.get("split_name", reference_metrics.get("benchmark_split", ""))).strip().lower()
+    severity = str(reference_metrics.get("severity", reference_metrics.get("fixed_severity", "moderate"))).strip().lower()
+    acceptable_invalid_tol = 0.02
+    acceptable_violation_tol = 0.02
+    acceptable_recovery_drop_tol = 0.05
+    if severity == "severe":
+        acceptable_invalid_tol = 0.05
+        acceptable_violation_tol = 0.05
+        acceptable_recovery_drop_tol = 0.08
+    elif split_name == "benchmark_resource_constrained_presets" and severity == "moderate":
+        acceptable_invalid_tol = 0.03
+        acceptable_violation_tol = 0.03
+        acceptable_recovery_drop_tol = 0.06
     recovery_floor_target = max(recovery_floor_baseline, ref_min_recovery - recovery_floor_tolerance, prev_min_recovery - recovery_floor_tolerance)
     recovery_gate_triggered = False
 
@@ -1357,9 +1396,9 @@ def select_best_candidate(
                     reasons.append("invalid_action_not_allowed")
             if _is_generated_candidate(cand):
                 acceptable_generated = (
-                    invalid_rate <= (ref_invalid + 0.20)
-                    and violation <= (ref_violation + 0.20)
-                    and min_recovery >= (_safe_float(reference_metrics.get("min_recovery_ratio", 0.0)) - 0.12)
+                    invalid_rate <= (ref_invalid + acceptable_invalid_tol)
+                    and violation <= (ref_violation + acceptable_violation_tol)
+                    and min_recovery >= (ref_min_recovery - acceptable_recovery_drop_tol)
                 )
                 if acceptable_generated:
                     acceptable_generated_ids.append(cid)
@@ -1444,6 +1483,32 @@ def select_best_candidate(
     best_candidate = sorted(pool, key=_candidate_rank_key, reverse=True)[0]
     best_metrics = best_candidate["metrics"]
 
+    accepted_deterministic_safe = [
+        c
+        for c in accepted
+        if str(c.get("candidate_origin", "")) in {"deterministic_safe_anchor", "deterministic_safe_backstop"}
+        and _safe_float(c.get("metrics", {}).get("constraint_violation_rate_eval", 1.0)) <= 0.0
+        and _safe_float(c.get("metrics", {}).get("invalid_action_rate_eval", c.get("metrics", {}).get("invalid_action_rate", 1.0))) <= 0.0
+    ]
+    generated_in_pool = [c for c in pool if _is_generated_candidate(c)]
+    if _is_generated_candidate(best_candidate) and accepted_deterministic_safe and generated_in_pool:
+        best_generated_min_recovery = max(_safe_float(c.get("metrics", {}).get("min_recovery_ratio", 0.0)) for c in generated_in_pool)
+        safe_near_generated = [
+            c
+            for c in accepted_deterministic_safe
+            if _safe_float(c.get("metrics", {}).get("min_recovery_ratio", 0.0)) >= (best_generated_min_recovery - 0.01)
+        ]
+        if safe_near_generated:
+            best_candidate = sorted(
+                safe_near_generated,
+                key=lambda c: (
+                    _safe_float(c.get("metrics", {}).get("min_recovery_ratio", 0.0)),
+                    _safe_float(c.get("metrics", {}).get("recovery_adjusted_selection_score", c.get("metrics", {}).get("selection_score", 0.0))),
+                ),
+                reverse=True,
+            )[0]
+            best_metrics = best_candidate["metrics"]
+
     best_violation = _safe_float(best_candidate.get("metrics", {}).get("constraint_violation_rate_eval", 1.0), default=1.0)
     best_invalid = _safe_float(
         best_candidate.get("metrics", {}).get("invalid_action_rate_eval", best_candidate.get("metrics", {}).get("invalid_action_rate", 1.0)),
@@ -1500,6 +1565,50 @@ def select_best_candidate(
         elif best_by_stability is not best_candidate:
             best_candidate = best_by_stability
             round_delta = _round_delta_summary(best_candidate.get("metrics", {}), reference_metrics)
+
+    sentinel_rescue_applied = False
+    sentinel_rescue_reason = ""
+    sentinel_rescue_origin = ""
+
+    # Final sentinel rescue: never emit sentinel-like final candidate when deterministic safe fallback exists.
+    if True:
+        best_m = best_candidate.get("metrics", {}) if isinstance(best_candidate.get("metrics"), dict) else {}
+        best_sel = _safe_float(best_m.get("selection_score", 0.0))
+        collapsed = (
+            (not math.isfinite(best_sel))
+            or best_sel <= -1e8
+            or (
+                _safe_float(best_m.get("min_recovery_ratio", 0.0)) <= 0.0
+                and _safe_float(best_m.get("critical_load_recovery_ratio", 0.0)) <= 0.0
+                and _safe_float(best_m.get("wait_hold_usage_eval", best_m.get("wait_hold_usage", 0.0))) <= 0.0
+            )
+        )
+        if collapsed:
+            deterministic_pool = [
+                c
+                for c in round_candidates
+                if str(c.get("candidate_origin", "")) in {"deterministic_safe_anchor", "deterministic_safe_backstop"}
+                and isinstance(c.get("metrics"), dict)
+                and math.isfinite(_safe_float(c.get("metrics", {}).get("selection_score", float("-inf"))))
+                and math.isfinite(_safe_float(c.get("metrics", {}).get("min_recovery_ratio", float("-inf"))))
+                and math.isfinite(_safe_float(c.get("metrics", {}).get("critical_load_recovery_ratio", float("-inf"))))
+            ]
+            if deterministic_pool:
+                sentinel_rescue_applied = True
+                sentinel_rescue_reason = "generated_candidate_invalid"
+                best_candidate = sorted(
+                    deterministic_pool,
+                    key=lambda c: (
+                        _safe_float(c.get("metrics", {}).get("min_recovery_ratio", 0.0)),
+                        _safe_float(c.get("metrics", {}).get("critical_load_recovery_ratio", 0.0)),
+                        _safe_float(c.get("metrics", {}).get("selection_score", -1e9)),
+                    ),
+                    reverse=True,
+                )[0]
+                sentinel_rescue_origin = str(best_candidate.get("candidate_origin", ""))
+                round_delta = _round_delta_summary(best_candidate.get("metrics", {}), reference_metrics)
+            else:
+                raise RuntimeError("Selection collapsed to sentinel-like candidate and no deterministic safe fallback is available.")
     generated_candidate_count = int(sum(1 for c in round_candidates if _is_generated_candidate(c)))
     selected_candidate_generated = bool(_is_generated_candidate(best_candidate))
     fallback_used = not selected_candidate_generated
@@ -1540,6 +1649,10 @@ def select_best_candidate(
             "acceptable_generated_candidate_ids": acceptable_generated_ids,
             "selected_candidate_is_generated": selected_candidate_generated,
             "fallback_used": fallback_used,
+            "fallback_reason": sentinel_rescue_reason,
+            "final_candidate_origin": str(best_candidate.get("candidate_origin", "")),
+            "sentinel_rescue_applied": sentinel_rescue_applied,
+            "sentinel_rescue_origin": sentinel_rescue_origin,
             "winner_source": winner_source,
             "round_delta_summary": round_delta,
             "stability_thresholds": {

@@ -1,0 +1,8 @@
+{
+  "run_benchmark_eval_supports_severe": true,
+  "benchmark_eval_presets_severe_supported": true,
+  "previous_per_seed_attempts_in_committed_v1": "not attempted for committed package, aggregate copied from prior summary",
+  "outputs_overwritten_or_ignored": "committed package was built from aggregate summary tables",
+  "fallback_to_aggregate_topic_summary": "yes",
+  "code_path": "packaging script used final_paper_data/standard_severe_summary.csv (aggregate_only_n1) instead of rerun outputs"
+}

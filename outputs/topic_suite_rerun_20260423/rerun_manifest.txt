@@ -1,0 +1,35 @@
+Topic suite rerun manifest (UTC 2026-04-23)
+
+Diagnosis
+- outputs/topic_suite was previously missing because no completed topic-suite rerun artifacts had been produced/committed from repo root in earlier turns.
+- Current rerun was executed from git repo root with explicit output root to avoid stale-path confusion.
+
+Output root
+- outputs/topic_suite_rerun_20260423
+
+Commands executed
+1) pwd
+2) git rev-parse --show-toplevel
+3) find "$(git rev-parse --show-toplevel)" -type f \( -name "topic_summary.json" -o -name "topic_summary.md" \)
+4) find "$(git rev-parse --show-toplevel)" -type d -name "topic_suite"
+5) ls -la
+6) ls -la "$(git rev-parse --show-toplevel)"
+7) cd "$(git rev-parse --show-toplevel)"
+8) rm -rf outputs/topic_suite_rerun_20260423
+9) find . -type d -name "__pycache__" -prune -exec rm -rf {} +
+10) find . -type f -name "*.pyc" -delete
+11) python -m py_compile run_outer_loop.py run_benchmark_eval.py run_topic_suite.py
+12) python run_topic_suite.py --output-root outputs/topic_suite_rerun_20260423
+13) ls -la outputs/topic_suite_rerun_20260423
+14) find outputs/topic_suite_rerun_20260423 -maxdepth 3 -type f | sort
+
+Run result
+- Rerun completed successfully.
+- repair_iterations: 3
+- hard_failures: 0
+- severe_issues: 1
+- affected_pairs included: ["standard_moderate", "full_outer_loop"]
+
+Notes
+- Full local per-seed artifacts are present under outputs/topic_suite_rerun_20260423/runs/.
+- PR commit is intentionally compact and includes summary + manifest files for review.
