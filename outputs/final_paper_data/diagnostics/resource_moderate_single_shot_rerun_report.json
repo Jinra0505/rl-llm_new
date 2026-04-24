@@ -1,0 +1,69 @@
+{
+  "scenario": "resource_moderate",
+  "method": "single_shot_llm",
+  "rerun_paths": [
+    "outputs/final_paper_data/reruns/resource_moderate/single_shot_llm__seed42.json",
+    "outputs/final_paper_data/reruns/resource_moderate/single_shot_llm__seed43.json",
+    "outputs/final_paper_data/reruns/resource_moderate/single_shot_llm__seed44.json"
+  ],
+  "records": [
+    {
+      "scenario": "resource_moderate",
+      "method": "single_shot_llm",
+      "seed": 42,
+      "path": "outputs/final_paper_data/reruns/resource_moderate/single_shot_llm__seed42.json",
+      "completed": true,
+      "failed": false,
+      "has_sentinel": true,
+      "has_zero_recovery_anomaly": true,
+      "valid_for_paper": false,
+      "selection_score": -1000000000.0,
+      "min_recovery_ratio": 0.0,
+      "critical_load_recovery_ratio": 0.0,
+      "constraint_violation_rate_eval": 0.0,
+      "invalid_action_rate_eval": 0.0,
+      "wait_hold_usage_eval": 0.0,
+      "eval_success_rate": 0.0,
+      "safety_capacity_index": 0.3
+    },
+    {
+      "scenario": "resource_moderate",
+      "method": "single_shot_llm",
+      "seed": 43,
+      "path": "outputs/final_paper_data/reruns/resource_moderate/single_shot_llm__seed43.json",
+      "completed": true,
+      "failed": false,
+      "has_sentinel": false,
+      "has_zero_recovery_anomaly": false,
+      "valid_for_paper": true,
+      "selection_score": 0.3466911071737607,
+      "min_recovery_ratio": 0.5890894134839376,
+      "critical_load_recovery_ratio": 0.9139358202616373,
+      "constraint_violation_rate_eval": 0.0,
+      "invalid_action_rate_eval": 0.0,
+      "wait_hold_usage_eval": 0.35,
+      "eval_success_rate": 0.0,
+      "safety_capacity_index": 0.8260588318109513
+    },
+    {
+      "scenario": "resource_moderate",
+      "method": "single_shot_llm",
+      "seed": 44,
+      "path": "outputs/final_paper_data/reruns/resource_moderate/single_shot_llm__seed44.json",
+      "completed": true,
+      "failed": false,
+      "has_sentinel": false,
+      "has_zero_recovery_anomaly": false,
+      "valid_for_paper": true,
+      "selection_score": 0.34867744902769726,
+      "min_recovery_ratio": 0.5891944567362467,
+      "critical_load_recovery_ratio": 0.9217936297257742,
+      "constraint_violation_rate_eval": 0.0,
+      "invalid_action_rate_eval": 0.0,
+      "wait_hold_usage_eval": 0.35,
+      "eval_success_rate": 0.0,
+      "safety_capacity_index": 0.8288458302617073
+    }
+  ],
+  "any_sentinel": true
+}
