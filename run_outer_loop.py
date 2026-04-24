@@ -5,6 +5,7 @@ import ast
 import importlib.util
 import json
 import logging
+import math
 import os
 import shutil
 import time
@@ -1565,8 +1566,12 @@ def select_best_candidate(
             best_candidate = best_by_stability
             round_delta = _round_delta_summary(best_candidate.get("metrics", {}), reference_metrics)
 
-    # Final narrow rescue: avoid sentinel-collapse winner in standard benchmark moderate runs.
-    if split_name == "benchmark_eval_presets" and severity == "moderate":
+    sentinel_rescue_applied = False
+    sentinel_rescue_reason = ""
+    sentinel_rescue_origin = ""
+
+    # Final sentinel rescue: never emit sentinel-like final candidate when deterministic safe fallback exists.
+    if True:
         best_m = best_candidate.get("metrics", {}) if isinstance(best_candidate.get("metrics"), dict) else {}
         best_sel = _safe_float(best_m.get("selection_score", 0.0))
         collapsed = (
@@ -1589,6 +1594,8 @@ def select_best_candidate(
                 and math.isfinite(_safe_float(c.get("metrics", {}).get("critical_load_recovery_ratio", float("-inf"))))
             ]
             if deterministic_pool:
+                sentinel_rescue_applied = True
+                sentinel_rescue_reason = "generated_candidate_invalid"
                 best_candidate = sorted(
                     deterministic_pool,
                     key=lambda c: (
@@ -1598,7 +1605,10 @@ def select_best_candidate(
                     ),
                     reverse=True,
                 )[0]
+                sentinel_rescue_origin = str(best_candidate.get("candidate_origin", ""))
                 round_delta = _round_delta_summary(best_candidate.get("metrics", {}), reference_metrics)
+            else:
+                raise RuntimeError("Selection collapsed to sentinel-like candidate and no deterministic safe fallback is available.")
     generated_candidate_count = int(sum(1 for c in round_candidates if _is_generated_candidate(c)))
     selected_candidate_generated = bool(_is_generated_candidate(best_candidate))
     fallback_used = not selected_candidate_generated
@@ -1639,6 +1649,10 @@ def select_best_candidate(
             "acceptable_generated_candidate_ids": acceptable_generated_ids,
             "selected_candidate_is_generated": selected_candidate_generated,
             "fallback_used": fallback_used,
+            "fallback_reason": sentinel_rescue_reason,
+            "final_candidate_origin": str(best_candidate.get("candidate_origin", "")),
+            "sentinel_rescue_applied": sentinel_rescue_applied,
+            "sentinel_rescue_origin": sentinel_rescue_origin,
             "winner_source": winner_source,
             "round_delta_summary": round_delta,
             "stability_thresholds": {

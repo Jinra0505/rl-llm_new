@@ -899,6 +899,8 @@ def run_training(
     late_stage_targeted_steps = 0
     late_stage_coordinated_steps = 0
     representative_eval_trace: list[dict[str, Any]] = []
+    eval_episode_traces: list[dict[str, Any]] = []
+    per_episode_eval_summary: list[dict[str, Any]] = []
     representative_eval_summary: dict[str, Any] = {}
     completion_window_entries = 0
     late_finish_action_count = 0
@@ -946,6 +948,7 @@ def run_training(
         terminated = False
         truncated = False
         episode_trace: list[dict[str, Any]] = []
+        cumulative_progress = 0.0
         for step_idx in range(eval_steps):
             rs = _effective_state(_call_revise(revise_state_fn, s, info), max_revised_dim)
             valid_mask = _valid_action_mask(
@@ -1038,18 +1041,38 @@ def run_training(
                     late_finish_action_count += 1
             if a in {9, 10, 11}:
                 ep_mes_moves += 1
-            if ep == 0 and step_idx < 12:
-                episode_trace.append(
-                    {
-                        "step": step_idx,
-                        "action": a,
-                        "progress_delta": float(info.get("progress_delta", 0.0)),
-                        "stage": str(info.get("stage", "unknown")),
-                        "invalid_action": bool(info.get("invalid_action", False)),
-                        "invalid_reason": str(info.get("invalid_reason", "")),
-                        "constraint_violation": bool(info.get("constraint_violation", False)),
-                    }
-                )
+            progress_delta = float(info.get("progress_delta", 0.0))
+            cumulative_progress += progress_delta
+            trace_row = {
+                "episode_id": int(ep),
+                "step": int(step_idx),
+                "action": int(a),
+                "stage": str(info.get("stage", "unknown")),
+                "progress_delta": progress_delta,
+                "cumulative_progress": float(cumulative_progress),
+                "critical_load_recovery_ratio": float(info.get("critical_load_recovery_ratio", 0.0)),
+                "min_recovery_ratio": float(
+                    min(
+                        info.get("power_recovery_ratio", 0.0),
+                        info.get("communication_recovery_ratio", 0.0),
+                        info.get("road_recovery_ratio", 0.0),
+                        info.get("critical_load_recovery_ratio", 0.0),
+                    )
+                ),
+                "communication_recovery_ratio": float(info.get("communication_recovery_ratio", 0.0)),
+                "power_recovery_ratio": float(info.get("power_recovery_ratio", 0.0)),
+                "road_recovery_ratio": float(info.get("road_recovery_ratio", 0.0)),
+                "mes_soc": float(info.get("mes_soc", 0.0)),
+                "material_stock": float(info.get("material_stock", 0.0)),
+                "switching_capability": float(info.get("switching_capability", 0.0)),
+                "invalid_action": bool(info.get("invalid_action", False)),
+                "invalid_reason": str(info.get("invalid_reason", "")),
+                "constraint_violation": bool(info.get("constraint_violation", False)),
+                "terminated": bool(terminated),
+                "truncated": bool(truncated),
+            }
+            episode_trace.append(trace_row)
+            eval_episode_traces.append(trace_row)
             s = ns
             if terminated or truncated:
                 break
@@ -1092,7 +1115,7 @@ def run_training(
         eval_zone_B_load.append(float(info.get("zone_B_critical_load_ratio", 0.0)))
         eval_zone_C_load.append(float(info.get("zone_C_critical_load_ratio", 0.0)))
         if ep == 0:
-            representative_eval_trace = episode_trace
+            representative_eval_trace = episode_trace[:12]
             representative_eval_summary = {
                 "steps": ep_steps,
                 "terminated": bool(terminated),
@@ -1101,6 +1124,36 @@ def run_training(
                 "final_progress_delta": float(info.get("progress_delta", 0.0)),
                 "final_critical_load_shortfall": float(info.get("critical_load_shortfall", 1.0)),
             }
+        per_episode_eval_summary.append(
+            {
+                "episode_id": int(ep),
+                "preset_name": str(info.get("preset_name", "")),
+                "preset_group": str(info.get("preset_group", "")),
+                "split_name": str(info.get("split_name", "")),
+                "total_reward": float(total),
+                "mean_progress_delta": float(np.mean(ep_progress)) if ep_progress else 0.0,
+                "final_cumulative_progress": float(cumulative_progress),
+                "final_min_recovery_ratio": float(
+                    min(
+                        info.get("power_recovery_ratio", 0.0),
+                        info.get("communication_recovery_ratio", 0.0),
+                        info.get("road_recovery_ratio", 0.0),
+                        info.get("critical_load_recovery_ratio", 0.0),
+                    )
+                ),
+                "final_critical_load_recovery_ratio": float(info.get("critical_load_recovery_ratio", 0.0)),
+                "final_communication_recovery_ratio": float(info.get("communication_recovery_ratio", 0.0)),
+                "final_power_recovery_ratio": float(info.get("power_recovery_ratio", 0.0)),
+                "final_road_recovery_ratio": float(info.get("road_recovery_ratio", 0.0)),
+                "invalid_action_rate": ep_invalid / float(max(1, ep_steps)),
+                "constraint_violation_rate": ep_violate / float(max(1, ep_steps)),
+                "wait_hold_usage_rate": float(sum(1 for t in episode_trace if int(t.get("action", -1)) == 14))
+                / float(max(1, ep_steps)),
+                "terminated": bool(terminated),
+                "truncated": bool(truncated),
+                "steps": int(ep_steps),
+            }
+        )
 
     total_actions = max(1, sum(action_usage.values()))
     action_usage_norm = {k: v / total_actions for k, v in action_usage.items()}
@@ -1234,6 +1287,16 @@ def run_training(
         },
         "invalid_reason_counts_eval": dict(eval_invalid_reason_counts),
         "representative_eval_trace": representative_eval_trace,
+        "eval_episode_traces": eval_episode_traces,
+        "per_episode_eval_summary": per_episode_eval_summary,
+        "per_preset_metrics": [
+            {
+                "preset_name": str(result_preset.get("preset_name", "")),
+                "preset_group": str(result_preset.get("preset_group", "")),
+                "split_name": str(result_preset.get("split_name", "")),
+            }
+            for result_preset in benchmark_meta_obs[:1]
+        ],
         "representative_eval_summary": representative_eval_summary,
         "eval_trajectory_summary": {
             "mean_steps": float(np.mean(eval_steps_per_episode)) if eval_steps_per_episode else 0.0,
@@ -1272,6 +1335,30 @@ def run_training(
     weights_cfg = task_mode_metric_weights or {}
     result["selection_score"] = _selection_score(result, weights_cfg=weights_cfg)
     result["selection_metric_used"] = "global_objective_score"
+    result["per_preset_metrics"] = [
+        {
+            "preset_name": str(result.get("preset_name", "")),
+            "preset_group": str(result.get("preset_group", "")),
+            "split_name": str(result.get("split_name", "")),
+            "selection_score": float(result.get("selection_score", 0.0)),
+            "safety_capacity_index": float(
+                0.35 * float(result.get("critical_load_recovery_ratio", 0.0))
+                + 0.35 * float(result.get("min_recovery_ratio", 0.0))
+                + 0.15 * (1.0 - float(result.get("invalid_action_rate_eval", result.get("invalid_action_rate", 0.0))))
+                + 0.15 * (1.0 - float(result.get("constraint_violation_rate_eval", 0.0)))
+            ),
+            "min_recovery_ratio": float(result.get("min_recovery_ratio", 0.0)),
+            "critical_load_recovery_ratio": float(result.get("critical_load_recovery_ratio", 0.0)),
+            "communication_recovery_ratio": float(result.get("communication_recovery_ratio", 0.0)),
+            "power_recovery_ratio": float(result.get("power_recovery_ratio", 0.0)),
+            "road_recovery_ratio": float(result.get("road_recovery_ratio", 0.0)),
+            "invalid_action_rate_eval": float(result.get("invalid_action_rate_eval", result.get("invalid_action_rate", 0.0))),
+            "constraint_violation_rate_eval": float(result.get("constraint_violation_rate_eval", 0.0)),
+            "wait_hold_usage_eval": float(result.get("wait_hold_usage_eval", result.get("wait_hold_usage", 0.0))),
+            "mean_progress_delta_eval": float(result.get("mean_progress_delta_eval", result.get("mean_progress_delta", 0.0))),
+            "eval_success_rate": float(result.get("eval_success_rate", result.get("success_rate", 0.0))),
+        }
+    ]
 
     # Internal consistency guard for eval count/rate metrics.
     if eval_total_steps > 0:

@@ -1,0 +1,11 @@
+{
+  "runs_attempted": 12,
+  "valid_seeds_per_method": {
+    "baseline_rl": 3,
+    "single_shot_llm": 3,
+    "full_outer_loop": 3,
+    "ablation_fixed_global": 3
+  },
+  "sentinel_failures": 0,
+  "evidence_level": "per_seed_n3"
+}
