@@ -1,0 +1,10 @@
+file,rows,cols,non_empty
+process_file_inventory_v3b.csv,8,4,True
+robustness_key_metrics_long.csv,55,7,True
+standard_moderate_action_category_share_seed_level.csv,21,7,True
+standard_moderate_mean_cumulative_progress_seed_level.csv,120,8,True
+standard_moderate_mean_cumulative_progress_trace_level.csv,120,8,True
+standard_moderate_mean_stepwise_progress_seed_level.csv,120,8,True
+standard_moderate_mean_stepwise_progress_trace_level.csv,120,8,True
+standard_moderate_stage_share_seed_level.csv,6,7,True
+standard_moderate_zone_layer_recovery_seed_level.csv,36,8,True
