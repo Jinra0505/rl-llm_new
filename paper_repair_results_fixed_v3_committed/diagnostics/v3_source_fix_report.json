@@ -1,0 +1,9 @@
+{
+  "modified_files": [
+    "train_rl.py"
+  ],
+  "bugs_fixed": [
+    "eval step trace now records split_name/preset_name/preset_group and exports cumulative_progress_from_delta + recovery_snapshot_progress"
+  ],
+  "expected_effect": "per-step process export includes non-empty preset/split metadata where available; cumulative semantics clarified"
+}
