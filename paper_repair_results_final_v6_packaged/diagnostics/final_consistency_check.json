@@ -1,0 +1,54 @@
+{
+  "comparison": {
+    "standard_moderate": "below",
+    "resource_moderate": "matches",
+    "standard_severe": "matches"
+  },
+  "full_vs_ablation": {
+    "standard_moderate": false,
+    "resource_moderate": false,
+    "standard_severe": false
+  },
+  "md_csv_checks": [
+    {
+      "file": "figure_ready_metrics.csv",
+      "md_exists": true,
+      "md_matches_csv": true
+    },
+    {
+      "file": "resource_moderate_per_seed.csv",
+      "md_exists": false,
+      "md_matches_csv": null
+    },
+    {
+      "file": "resource_moderate_summary.csv",
+      "md_exists": true,
+      "md_matches_csv": true
+    },
+    {
+      "file": "robustness_stress_summary.csv",
+      "md_exists": true,
+      "md_matches_csv": true
+    },
+    {
+      "file": "standard_moderate_per_seed.csv",
+      "md_exists": false,
+      "md_matches_csv": null
+    },
+    {
+      "file": "standard_moderate_summary.csv",
+      "md_exists": true,
+      "md_matches_csv": true
+    },
+    {
+      "file": "standard_severe_per_seed.csv",
+      "md_exists": false,
+      "md_matches_csv": null
+    },
+    {
+      "file": "standard_severe_summary.csv",
+      "md_exists": true,
+      "md_matches_csv": true
+    }
+  ]
+}
