@@ -1395,12 +1395,20 @@ def select_best_candidate(
                 if not _is_generated_candidate(cand):
                     reasons.append("invalid_action_not_allowed")
             if _is_generated_candidate(cand):
+                non_dominated_safe_improvement = (
+                    violation <= (ref_violation + acceptable_violation_tol)
+                    and invalid_rate <= (ref_invalid + acceptable_invalid_tol)
+                    and (
+                        min_recovery >= (ref_min_recovery + 1e-6)
+                        or critical >= (ref_critical + 1e-6)
+                    )
+                )
                 acceptable_generated = (
                     invalid_rate <= (ref_invalid + acceptable_invalid_tol)
                     and violation <= (ref_violation + acceptable_violation_tol)
                     and min_recovery >= (ref_min_recovery - acceptable_recovery_drop_tol)
                 )
-                if acceptable_generated:
+                if acceptable_generated or non_dominated_safe_improvement:
                     acceptable_generated_ids.append(cid)
                     reasons = [r for r in reasons if r in {"resource_sustainability_collapse"}]
                 else:

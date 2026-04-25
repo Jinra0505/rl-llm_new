@@ -1,0 +1,17 @@
+# v4 verification
+
+```json
+{
+  "all_csv_readable": true,
+  "all_json_parseable": true,
+  "no_sentinel_scores": true,
+  "zero_recovery_anomaly_rows": 0,
+  "n_valid_match": true,
+  "action_stage_share_from_v3_seed_level": true,
+  "standard_moderate_action_category_share.csv_sum_min": 0.9999999999999997,
+  "standard_moderate_action_category_share.csv_sum_max": 0.9999999999999999,
+  "standard_moderate_stage_share.csv_sum_min": 1.0,
+  "standard_moderate_stage_share.csv_sum_max": 1.0,
+  "process_summaries_true_seed_level_aggregation": true
+}
+```
