@@ -1,0 +1,25 @@
+# V3 Standard Moderate Process Export Report
+
+{
+  "step_rows_exported": 1904,
+  "episode_rows_exported": 54,
+  "preset_rows_exported": 9,
+  "preset_name_non_null_rate": 1.0,
+  "preset_group_non_null_rate": 1.0,
+  "split_name_non_null_rate": 1.0,
+  "stage_value_counts": {
+    "middle": 1554,
+    "late": 350
+  },
+  "stages_present": [
+    "late",
+    "middle"
+  ],
+  "has_early": false,
+  "has_middle": true,
+  "has_late": true,
+  "cumulative_progress_definition": "cumulative_progress retained from source trace; cumulative_progress_from_delta is explicit cumsum(progress_delta).",
+  "cumulative_progress_from_delta_available": true,
+  "recovery_snapshot_progress_available": true,
+  "cumulative_monotonicity_check_nonnegative_delta": false
+}
