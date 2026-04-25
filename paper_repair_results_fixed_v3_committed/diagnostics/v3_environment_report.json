@@ -1,0 +1,19 @@
+{
+  "timestamp_utc": "2026-04-25T01:28:35.223563+00:00",
+  "pwd": "/workspace/rl-llm_new",
+  "git_toplevel": "/workspace/rl-llm_new",
+  "git_status_short": [
+    " M requirements.txt",
+    " M train_rl.py",
+    "?? __pycache__/",
+    "?? generated/",
+    "?? outputs/real_outer_loop_v4/",
+    "?? paper_repair_results_fixed_v3/",
+    "?? paper_repair_results_fixed_v3_committed/",
+    "?? v3_repair_pipeline.py"
+  ],
+  "py_compile_commands": [
+    "python -m py_compile run_benchmark_eval.py run_outer_loop.py train_rl.py mock_recovery_env.py structured_spec_builder.py task_recognizer.py",
+    "python -m py_compile result_validation.py export_process_data.py"
+  ]
+}

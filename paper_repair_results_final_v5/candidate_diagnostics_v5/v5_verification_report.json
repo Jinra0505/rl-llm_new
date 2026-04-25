@@ -1,0 +1,10 @@
+{
+  "all_csv_readable": true,
+  "all_json_parseable": true,
+  "no_sentinel_values": true,
+  "n_valid_all_main_methods_eq3": true,
+  "action_share_sum_min": 0.9999999999999997,
+  "action_share_sum_max": 0.9999999999999999,
+  "stage_share_sum_min": 1.0,
+  "stage_share_sum_max": 1.0
+}
