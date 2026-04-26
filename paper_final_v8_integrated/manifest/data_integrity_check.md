@@ -43,7 +43,7 @@
 - required scenarios present: yes
 - high-pressure process files include all three main methods: yes
 - high-pressure mechanism files include all three main methods: yes
-- action-category shares sum approximately to 1: yes (max deviation=0.223611)
+- action-category activation rates (legacy *_share filename) are multi-label rates and are not constrained to sum to 1 (observed max deviation from 1=0.223611)
 - stage shares sum approximately to 1: yes (max deviation=0.000000)
 - no required plotting file is header-only: yes
 - optional file exclusions: none (candidate diagnostics included as compact CSV)

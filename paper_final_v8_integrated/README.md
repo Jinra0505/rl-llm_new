@@ -20,8 +20,8 @@ Final integrated rerun package for paper-ready tables and plotting exports from 
 - final_tables/figure_ready_metrics.csv
 - process_exports/resource_moderate_mean_cumulative_progress.csv
 - process_exports/standard_severe_mean_cumulative_progress.csv
-- mechanism_exports/resource_moderate_action_category_share.csv
-- mechanism_exports/standard_severe_action_category_share.csv
+- mechanism_exports/resource_moderate_action_category_share.csv (legacy filename; values represent action-category activation rates)
+- mechanism_exports/standard_severe_action_category_share.csv (legacy filename; values represent action-category activation rates)
 
 ## Supplementary plotting files
 - process_exports/*_mean_stepwise_progress.csv

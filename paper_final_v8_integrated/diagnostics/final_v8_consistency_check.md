@@ -56,8 +56,11 @@
 - per-seed means reproduce summary means: yes
 - max absolute difference: 0.000000000000
 
-## 6) Composition checks
-- max deviation from 1 for action-category shares: 0.223611111111
+## 6) Mechanism checks
+- action-category file semantics: activation rates by category (legacy filename uses "_share").
+- action-category activation totals are not constrained to sum to 1 in this export.
+- observed max deviation from 1 for action-category activation totals: 0.223611111111
+- stage shares are compositional and should sum to 1.
 - max deviation from 1 for stage shares: 0.000000000000
 
 ## 7) Data hygiene

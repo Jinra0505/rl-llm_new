@@ -2,7 +2,7 @@
 
 - Can high-pressure cumulative process be plotted? yes
 - Can high-pressure stepwise process be plotted? yes
-- Can high-pressure action heatmap be plotted? yes
+- Can high-pressure action-category activation heatmap be plotted? yes
 
 ## Files to send to plotting assistant
 - final_tables/figure_ready_metrics.csv
