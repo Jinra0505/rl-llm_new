@@ -1,0 +1,8 @@
+scenario,method,candidate_source,count,share
+resource_moderate,full_outer_loop,noop_fallback,3,1.0
+resource_moderate,single_shot_llm,noop_fallback,2,0.6666666666666666
+resource_moderate,single_shot_llm,safe_anchor,1,0.3333333333333333
+standard_moderate,full_outer_loop,noop_fallback,3,1.0
+standard_moderate,single_shot_llm,noop_fallback,3,1.0
+standard_severe,full_outer_loop,noop_fallback,3,1.0
+standard_severe,single_shot_llm,noop_fallback,3,1.0
