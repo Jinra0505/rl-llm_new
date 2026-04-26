@@ -1,0 +1,83 @@
+{
+  "all_csv_readable": true,
+  "all_json_parseable": true,
+  "selection_score_sentinel_in_summaries": false,
+  "duplicate_vectors_pre_count": 6,
+  "duplicate_vectors_post_count": 4,
+  "remaining_duplicates": [
+    {
+      "scenario": "standard_moderate",
+      "method_a": "single_shot_llm",
+      "seed_a": 43,
+      "method_b": "full_outer_loop",
+      "seed_b": 43,
+      "duplicate_metrics": "selection_score|min_recovery_ratio|critical_load_recovery_ratio|communication_recovery_ratio|power_recovery_ratio|road_recovery_ratio|constraint_violation_rate_eval|invalid_action_rate_eval|wait_hold_usage_eval|mean_progress_delta_eval|eval_success_rate|safety_capacity_index",
+      "exact_duplicate_core_vector": true,
+      "source_path_a": "paper_repair_results_fixed_v3/standard_moderate/single_shot_llm__seed43.json",
+      "source_path_b": "paper_repair_results_fixed_v3/standard_moderate/full_outer_loop__seed43.json",
+      "suspected_cause": "deterministic_fallback_same_anchor_or_identical_policy_behavior",
+      "rerun_required": false,
+      "duplicate_assessment": "justified_after_rerun_deterministic"
+    },
+    {
+      "scenario": "standard_moderate",
+      "method_a": "single_shot_llm",
+      "seed_a": 44,
+      "method_b": "full_outer_loop",
+      "seed_b": 44,
+      "duplicate_metrics": "selection_score|min_recovery_ratio|critical_load_recovery_ratio|communication_recovery_ratio|power_recovery_ratio|road_recovery_ratio|constraint_violation_rate_eval|invalid_action_rate_eval|wait_hold_usage_eval|mean_progress_delta_eval|eval_success_rate|safety_capacity_index",
+      "exact_duplicate_core_vector": true,
+      "source_path_a": "paper_repair_results_fixed_v3/standard_moderate/single_shot_llm__seed44.json",
+      "source_path_b": "paper_repair_results_fixed_v3/standard_moderate/full_outer_loop__seed44.json",
+      "suspected_cause": "deterministic_fallback_same_anchor_or_identical_policy_behavior",
+      "rerun_required": false,
+      "duplicate_assessment": "justified_after_rerun_deterministic"
+    },
+    {
+      "scenario": "standard_severe",
+      "method_a": "single_shot_llm",
+      "seed_a": 43,
+      "method_b": "ablation_fixed_global",
+      "seed_b": 43,
+      "duplicate_metrics": "selection_score|min_recovery_ratio|critical_load_recovery_ratio|communication_recovery_ratio|power_recovery_ratio|road_recovery_ratio|constraint_violation_rate_eval|invalid_action_rate_eval|wait_hold_usage_eval|mean_progress_delta_eval|eval_success_rate|safety_capacity_index",
+      "exact_duplicate_core_vector": true,
+      "source_path_a": "paper_repair_results_fixed_v3/standard_severe/single_shot_llm__seed43.json",
+      "source_path_b": "paper_repair_results_fixed_v3/standard_severe/ablation_fixed_global__seed43.json",
+      "suspected_cause": "deterministic_fallback_same_anchor_or_identical_policy_behavior",
+      "rerun_required": false,
+      "duplicate_assessment": "justified_after_rerun_deterministic"
+    },
+    {
+      "scenario": "standard_severe",
+      "method_a": "full_outer_loop",
+      "seed_a": 44,
+      "method_b": "ablation_fixed_global",
+      "seed_b": 44,
+      "duplicate_metrics": "selection_score|min_recovery_ratio|critical_load_recovery_ratio|communication_recovery_ratio|power_recovery_ratio|road_recovery_ratio|constraint_violation_rate_eval|invalid_action_rate_eval|wait_hold_usage_eval|mean_progress_delta_eval|eval_success_rate|safety_capacity_index",
+      "exact_duplicate_core_vector": true,
+      "source_path_a": "paper_repair_results_fixed_v3/standard_severe/full_outer_loop__seed44.json",
+      "source_path_b": "paper_repair_results_fixed_v3/standard_severe/ablation_fixed_global__seed44.json",
+      "suspected_cause": "deterministic_fallback_same_anchor_or_identical_policy_behavior",
+      "rerun_required": false,
+      "duplicate_assessment": "justified_after_rerun_deterministic"
+    }
+  ],
+  "step_rows_exported": 1904,
+  "preset_name_non_null_rate": 1.0,
+  "compact_summaries_non_empty": {
+    "robustness_key_metrics_long.csv": 132,
+    "standard_moderate_stage_share.csv": 6,
+    "standard_moderate_action_category_share.csv": 19,
+    "standard_moderate_mean_stepwise_progress.csv": 120,
+    "standard_moderate_mean_cumulative_progress.csv": 120,
+    "process_file_inventory.csv": 6
+  },
+  "action_usage_sum_min": 1.0,
+  "action_usage_sum_max": 1.0,
+  "stage_usage_sum_min": 1.0,
+  "stage_usage_sum_max": 1.0,
+  "cumulative_semantics": "cumulative_progress retained from source trace; cumulative_progress_from_delta is explicit cumsum(progress_delta).",
+  "figure_ready_metrics_schema_valid": true,
+  "robustness_stress_summary_reflects_v3": true,
+  "unrelated_tracked_files_modified": "checked via git status by operator"
+}

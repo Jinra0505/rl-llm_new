@@ -1340,10 +1340,26 @@ def select_best_candidate(
         acceptable_recovery_drop_tol = 0.06
     recovery_floor_target = max(recovery_floor_baseline, ref_min_recovery - recovery_floor_tolerance, prev_min_recovery - recovery_floor_tolerance)
     recovery_gate_triggered = False
+    candidate_audit_rows: list[dict[str, Any]] = []
+
+    def _safety_capacity_index(metrics: dict[str, Any]) -> float:
+        critical = _safe_float(metrics.get("critical_load_recovery_ratio", 0.0))
+        min_rec = _safe_float(metrics.get("min_recovery_ratio", 0.0))
+        invalid = _safe_float(metrics.get("invalid_action_rate_eval", metrics.get("invalid_action_rate", 0.0)))
+        vio = _safe_float(metrics.get("constraint_violation_rate_eval", 0.0))
+        return float(0.35 * critical + 0.35 * min_rec + 0.15 * (1.0 - invalid) + 0.15 * (1.0 - vio))
 
     for cand in round_candidates:
         cid = str(cand.get("candidate_id", "unknown"))
         metrics = cand.get("metrics", {})
+        cand.setdefault("candidate_source", str(cand.get("candidate_origin", "generated")))
+        cand.setdefault("generation_round", int(cand.get("generation_round", 0)))
+        validation_ok = True
+        if isinstance(cand.get("validation"), dict):
+            validation_ok = bool(cand.get("validation", {}).get("valid", True))
+        cand.setdefault("validation_status", "valid" if validation_ok else "invalid")
+        cand.setdefault("fallback_used", str(cand.get("candidate_origin", "generated")) != "generated")
+        cand.setdefault("fallback_reason", "")
         reasons: list[str] = []
         if not isinstance(metrics, dict) or "selection_score" not in metrics:
             reasons.append("missing_metrics")
@@ -1395,12 +1411,20 @@ def select_best_candidate(
                 if not _is_generated_candidate(cand):
                     reasons.append("invalid_action_not_allowed")
             if _is_generated_candidate(cand):
+                non_dominated_safe_improvement = (
+                    violation <= (ref_violation + acceptable_violation_tol)
+                    and invalid_rate <= (ref_invalid + acceptable_invalid_tol)
+                    and (
+                        min_recovery >= (ref_min_recovery + 1e-6)
+                        or critical >= (ref_critical + 1e-6)
+                    )
+                )
                 acceptable_generated = (
                     invalid_rate <= (ref_invalid + acceptable_invalid_tol)
                     and violation <= (ref_violation + acceptable_violation_tol)
                     and min_recovery >= (ref_min_recovery - acceptable_recovery_drop_tol)
                 )
-                if acceptable_generated:
+                if acceptable_generated or non_dominated_safe_improvement:
                     acceptable_generated_ids.append(cid)
                     reasons = [r for r in reasons if r in {"resource_sustainability_collapse"}]
                 else:
@@ -1410,12 +1434,37 @@ def select_best_candidate(
                 recovery_gate_triggered = True
             if violation <= 0.0 and invalid_rate <= 0.0:
                 safe_candidates_all.append(cand)
+            if isinstance(metrics, dict):
+                metrics["safety_capacity_index"] = _safety_capacity_index(metrics)
 
         if reasons:
             rejected_ids.append(cid)
             rejection_reasons[cid] = reasons
         else:
             accepted.append(cand)
+        candidate_audit_rows.append(
+            {
+                "candidate_id": cid,
+                "candidate_source": str(cand.get("candidate_source", cand.get("candidate_origin", "generated"))),
+                "generation_round": int(cand.get("generation_round", 0)),
+                "validation_status": str(cand.get("validation_status", "valid")),
+                "fallback_used": bool(cand.get("fallback_used", False)),
+                "fallback_reason": str(cand.get("fallback_reason", "")),
+                "rejection_reason": "|".join(reasons),
+                "score_components": {
+                    "selection_score": _safe_float(metrics.get("selection_score", 0.0)) if isinstance(metrics, dict) else 0.0,
+                    "min_recovery_ratio": _safe_float(metrics.get("min_recovery_ratio", 0.0)) if isinstance(metrics, dict) else 0.0,
+                    "critical_load_recovery_ratio": _safe_float(metrics.get("critical_load_recovery_ratio", 0.0)) if isinstance(metrics, dict) else 0.0,
+                    "safety_capacity_index": _safe_float(metrics.get("safety_capacity_index", 0.0)) if isinstance(metrics, dict) else 0.0,
+                    "mean_progress_delta_eval": _safe_float(metrics.get("mean_progress_delta_eval", metrics.get("mean_progress_delta", 0.0)))
+                    if isinstance(metrics, dict)
+                    else 0.0,
+                    "wait_hold_usage_eval": _safe_float(metrics.get("wait_hold_usage_eval", metrics.get("wait_hold_usage", 0.0)))
+                    if isinstance(metrics, dict)
+                    else 0.0,
+                },
+            }
+        )
 
     strict_safety_preference_applied = False
     selected_candidate_is_strict_safe = False
@@ -1479,6 +1528,39 @@ def select_best_candidate(
         adjusted = _safe_float(m.get("recovery_adjusted_selection_score", m.get("selection_score", 0.0)))
         raw_score = _safe_float(m.get("selection_score", 0.0))
         return (source_rank, success, min_recovery, -wait_usage, adjusted, raw_score)
+
+    # Retain non-dominated strict-safe candidates before final selection.
+    strict_safe_pool = [
+        c
+        for c in pool
+        if _safe_float(c.get("metrics", {}).get("constraint_violation_rate_eval", 1.0), default=1.0) <= 0.0
+        and _safe_float(c.get("metrics", {}).get("invalid_action_rate_eval", c.get("metrics", {}).get("invalid_action_rate", 1.0)), default=1.0) <= 0.0
+    ]
+    if strict_safe_pool:
+        def _dominates(a: dict[str, Any], b: dict[str, Any]) -> bool:
+            am, bm = a.get("metrics", {}), b.get("metrics", {})
+            avec = (
+                _safe_float(am.get("min_recovery_ratio", 0.0)),
+                _safe_float(am.get("critical_load_recovery_ratio", 0.0)),
+                _safe_float(am.get("safety_capacity_index", _safety_capacity_index(am))),
+                _safe_float(am.get("mean_progress_delta_eval", am.get("mean_progress_delta", 0.0))),
+                -_safe_float(am.get("wait_hold_usage_eval", am.get("wait_hold_usage", 0.0))),
+            )
+            bvec = (
+                _safe_float(bm.get("min_recovery_ratio", 0.0)),
+                _safe_float(bm.get("critical_load_recovery_ratio", 0.0)),
+                _safe_float(bm.get("safety_capacity_index", _safety_capacity_index(bm))),
+                _safe_float(bm.get("mean_progress_delta_eval", bm.get("mean_progress_delta", 0.0))),
+                -_safe_float(bm.get("wait_hold_usage_eval", bm.get("wait_hold_usage", 0.0))),
+            )
+            return all(x >= y for x, y in zip(avec, bvec)) and any(x > y for x, y in zip(avec, bvec))
+
+        nd_pool = []
+        for cand in strict_safe_pool:
+            if not any(_dominates(other, cand) for other in strict_safe_pool if other is not cand):
+                nd_pool.append(cand)
+        if nd_pool:
+            pool = nd_pool
 
     best_candidate = sorted(pool, key=_candidate_rank_key, reverse=True)[0]
     best_metrics = best_candidate["metrics"]
@@ -1655,6 +1737,7 @@ def select_best_candidate(
             "sentinel_rescue_origin": sentinel_rescue_origin,
             "winner_source": winner_source,
             "round_delta_summary": round_delta,
+            "candidate_audit_rows": candidate_audit_rows,
             "stability_thresholds": {
                 "small_score_gain_max": small_gain_max,
                 "meaningful_score_gain_min": meaningful_score_gain,
@@ -2097,11 +2180,16 @@ def main() -> None:
             record = {
                 "candidate_id": cid,
                 "candidate_origin": "generated",
+                "candidate_source": "generated_full_loop_candidate",
+                "generation_round": int(round_idx + 1),
                 "validation": report,
+                "validation_status": "valid" if bool(report.get("valid", False)) else "invalid",
                 "candidate": report["normalized_payload"],
                 "search_style": style_name,
                 "search_style_emphasis": style_meta["emphasis"],
                 "style_contract": style_contract,
+                "fallback_used": False,
+                "fallback_reason": "",
             }
             if report["valid"]:
                 fname = report["normalized_payload"]["file_name"]
@@ -2210,6 +2298,29 @@ def main() -> None:
             (round_dir / "round_status.json").write_text(json.dumps(round_status, indent=2), encoding="utf-8")
             round_candidates.append(record)
 
+        # Carry forward candidates for richer safety-validated pool.
+        if previous_best and isinstance(previous_best.get("metrics"), dict):
+            feedback_refined = dict(previous_best)
+            feedback_refined["candidate_id"] = f"r{round_idx+1}_feedback_refined"
+            feedback_refined["candidate_origin"] = "feedback_refined_candidate"
+            feedback_refined["candidate_source"] = "feedback_refined_candidate"
+            feedback_refined["generation_round"] = int(round_idx)
+            feedback_refined["validation_status"] = "valid"
+            feedback_refined["fallback_used"] = bool(str(previous_best.get("candidate_origin", "")) != "generated")
+            feedback_refined["fallback_reason"] = "carried_forward_previous_best"
+            round_candidates.append(feedback_refined)
+
+        if history and isinstance(history[0].get("best_candidate", {}).get("metrics"), dict):
+            single_shot_like = dict(history[0].get("best_candidate", {}))
+            single_shot_like["candidate_id"] = f"r{round_idx+1}_single_shot"
+            single_shot_like["candidate_origin"] = "single_shot_llm_candidate"
+            single_shot_like["candidate_source"] = "single_shot_llm_candidate"
+            single_shot_like["generation_round"] = 1
+            single_shot_like["validation_status"] = "valid"
+            single_shot_like["fallback_used"] = bool(str(single_shot_like.get("candidate_origin", "")) != "generated")
+            single_shot_like["fallback_reason"] = "single_shot_reference"
+            round_candidates.append(single_shot_like)
+
         # Deterministic safe anchor candidate: always available each round.
         anchor_id = f"r{round_idx+1}_anchor"
         anchor_dir = round_dir / anchor_id
@@ -2229,11 +2340,16 @@ def main() -> None:
         anchor_record: dict[str, Any] = {
             "candidate_id": anchor_id,
             "candidate_origin": "deterministic_safe_anchor",
+            "candidate_source": "deterministic_safe_anchor",
+            "generation_round": int(round_idx + 1),
             "validation": anchor_report,
+            "validation_status": "valid" if bool(anchor_report.get("valid", False)) else "invalid",
             "candidate": anchor_report.get("normalized_payload", anchor_payload),
             "search_style": "safe_anchor",
             "search_style_emphasis": "deterministic conservative legality/recovery-floor anchor",
             "style_contract": {"anchor": True, "task_mode": route.get("task_mode", "")},
+            "fallback_used": True,
+            "fallback_reason": "deterministic_safe_anchor",
         }
         if anchor_report.get("valid", False):
             anchor_code = anchor_report["normalized_payload"]["code"]
@@ -2301,6 +2417,17 @@ def main() -> None:
         (round_dir / "round_status.json").write_text(json.dumps(round_status, indent=2), encoding="utf-8")
         round_candidates.append(anchor_record)
 
+        # Fixed-global safety anchor (task mode fixed to global_efficiency_priority) for cross-mode stability checks.
+        fixed_anchor = dict(anchor_record)
+        fixed_anchor["candidate_id"] = f"r{round_idx+1}_fixed_global_anchor"
+        fixed_anchor["candidate_origin"] = "fixed_global_safety_anchor"
+        fixed_anchor["candidate_source"] = "fixed_global_safety_anchor"
+        fixed_anchor["generation_round"] = int(round_idx + 1)
+        fixed_anchor["validation_status"] = "valid" if bool(anchor_report.get("valid", False)) else "invalid"
+        fixed_anchor["fallback_used"] = True
+        fixed_anchor["fallback_reason"] = "fixed_global_anchor"
+        round_candidates.append(fixed_anchor)
+
         # Deterministic baseline-noop safety backstop candidate.
         backstop_id = f"r{round_idx+1}_backstop"
         backstop_dir = round_dir / backstop_id
@@ -2308,14 +2435,19 @@ def main() -> None:
         backstop_record: dict[str, Any] = {
             "candidate_id": backstop_id,
             "candidate_origin": "deterministic_safe_backstop",
+            "candidate_source": "deterministic_safe_backstop",
+            "generation_round": int(round_idx + 1),
             "search_style": "baseline_noop_backstop",
             "search_style_emphasis": "strict zero-safety backstop with intrinsic off",
             "style_contract": {"backstop": True, "intrinsic_mode": "off", "task_mode": route.get("task_mode", "")},
             "validation": {"valid": True, "source_module": "baseline_noop.py"},
+            "validation_status": "valid",
             "candidate": {"file_name": "baseline_noop.py"},
             "candidate_path": str(Path("baseline_noop.py")),
             "task_mode": route["task_mode"],
             "route_source": "deterministic_backstop",
+            "fallback_used": True,
+            "fallback_reason": "deterministic_safe_backstop",
         }
         t0_backstop_train = time.time()
         backstop_attempts: list[dict[str, Any]] = []

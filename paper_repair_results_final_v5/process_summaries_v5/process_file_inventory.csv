@@ -1,0 +1,7 @@
+file,rows,cols,non_empty
+process_file_inventory.csv,5,4,True
+robustness_key_metrics_long.csv,132,8,True
+standard_moderate_action_category_share.csv,21,5,True
+standard_moderate_mean_cumulative_progress.csv,120,6,True
+standard_moderate_mean_stepwise_progress.csv,120,6,True
+standard_moderate_stage_share.csv,6,5,True
