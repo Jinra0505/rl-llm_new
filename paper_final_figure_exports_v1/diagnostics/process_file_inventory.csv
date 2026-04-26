@@ -1,0 +1,16 @@
+file_name,exists,row_count,scenario,notes
+resource_moderate_mean_cumulative_progress.csv,True,0,resource_moderate,No finalized step-level process logs for resource_moderate/standard_severe in V6 package or linked raw-run files; only per-seed summaries are available.
+standard_severe_mean_cumulative_progress.csv,True,0,standard_severe,No finalized step-level process logs for resource_moderate/standard_severe in V6 package or linked raw-run files; only per-seed summaries are available.
+resource_moderate_mean_stepwise_progress.csv,True,0,resource_moderate,No finalized step-level process logs for resource_moderate/standard_severe in V6 package or linked raw-run files; only per-seed summaries are available.
+standard_severe_mean_stepwise_progress.csv,True,0,standard_severe,No finalized step-level process logs for resource_moderate/standard_severe in V6 package or linked raw-run files; only per-seed summaries are available.
+resource_moderate_action_category_share.csv,True,0,resource_moderate,No finalized step-level process logs for resource_moderate/standard_severe in V6 package or linked raw-run files; only per-seed summaries are available.
+standard_severe_action_category_share.csv,True,0,standard_severe,No finalized step-level process logs for resource_moderate/standard_severe in V6 package or linked raw-run files; only per-seed summaries are available.
+resource_moderate_stage_share.csv,True,0,resource_moderate,No finalized step-level process logs for resource_moderate/standard_severe in V6 package or linked raw-run files; only per-seed summaries are available.
+standard_severe_stage_share.csv,True,0,standard_severe,No finalized step-level process logs for resource_moderate/standard_severe in V6 package or linked raw-run files; only per-seed summaries are available.
+resource_moderate_layer_recovery_by_step.csv,True,0,resource_moderate,No step-level trajectory logs exist for these scenarios in finalized package.
+standard_severe_layer_recovery_by_step.csv,True,0,standard_severe,No step-level trajectory logs exist for these scenarios in finalized package.
+resource_moderate_safety_by_step.csv,True,0,resource_moderate,No step-level trajectory logs exist for these scenarios in finalized package.
+standard_severe_safety_by_step.csv,True,0,standard_severe,No step-level trajectory logs exist for these scenarios in finalized package.
+candidate_selection_summary.csv,True,6,resource_moderate|standard_severe,
+candidate_source_share.csv,True,2,resource_moderate|standard_severe,
+candidate_rejection_reason_summary.csv,True,20,resource_moderate|standard_severe,

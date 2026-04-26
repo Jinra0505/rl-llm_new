@@ -1,0 +1,7 @@
+scenario,seed,selected_method,selected_candidate_id,candidate_source,generation_round,validation_status,fallback_used,fallback_reason,selection_score,constraint_violation_rate_eval,invalid_action_rate_eval,critical_load_recovery_ratio,safety_capacity_index
+resource_moderate,42,full_outer_loop,r3_feedback_refined,feedback_refined_candidate,3,valid,False,,0.3455287645061811,0.0,0.0,0.9092339475949606,0.8244499415159225
+resource_moderate,43,full_outer_loop,r3_feedback_refined,feedback_refined_candidate,3,valid,False,,0.3466911071737607,0.0,0.0,0.9139358202616372,0.8260588318109512
+resource_moderate,44,full_outer_loop,r3_feedback_refined,feedback_refined_candidate,3,valid,False,,0.3486774490276972,0.0,0.0,0.9217936297257742,0.8288458302617073
+standard_severe,42,full_outer_loop,r3_feedback_refined,feedback_refined_candidate,3,valid,False,,0.3394684397975603,0.0,0.0,0.8615386585394541,0.8180529882510503
+standard_severe,43,full_outer_loop,r3_feedback_refined,feedback_refined_candidate,3,valid,False,,0.4750777199015961,0.0,0.0,0.8675095240275065,0.8214612528681755
+standard_severe,44,full_outer_loop,r3_feedback_refined,feedback_refined_candidate,3,valid,False,,0.4425514642968488,0.0,0.0,0.8764612674713135,0.8224972690145175
