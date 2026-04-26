@@ -1,0 +1,3 @@
+scenario,candidate_source,n_selected,mean_usage_share
+resource_moderate,feedback_refined_candidate,3,1.0
+standard_severe,feedback_refined_candidate,3,1.0

@@ -1,0 +1,46 @@
+# V3 committed manifest
+- raw V3 folder: paper_repair_results_fixed_v3
+- compact folder: paper_repair_results_fixed_v3_committed
+- copied files:
+  - diagnostics/v3_process_metadata_diagnosis.json
+  - diagnostics/v3_standard_moderate_process_export_report.md
+  - diagnostics/v3_environment_report.md
+  - diagnostics/v3_targeted_rerun_report.json
+  - diagnostics/v3_environment_report.json
+  - diagnostics/v3_duplicate_result_diagnosis.md
+  - diagnostics/v3_source_fix_report.md
+  - diagnostics/v3_targeted_rerun_report.md
+  - diagnostics/v3_duplicate_result_diagnosis.json
+  - diagnostics/v3_final_verification_report.json
+  - diagnostics/v3_source_fix_report.json
+  - diagnostics/v3_final_verification_report.md
+  - diagnostics/v3_process_metadata_diagnosis.md
+  - diagnostics/v3_standard_moderate_process_export_report.json
+  - final_tables/standard_moderate_summary.csv
+  - final_tables/standard_severe_summary.md
+  - final_tables/resource_moderate_per_seed.csv
+  - final_tables/figure_ready_metrics.csv
+  - final_tables/figure_ready_metrics.md
+  - final_tables/standard_severe_summary.csv
+  - final_tables/resource_moderate_summary.md
+  - final_tables/standard_moderate_per_seed.csv
+  - final_tables/robustness_stress_summary.csv
+  - final_tables/standard_severe_per_seed.csv
+  - final_tables/standard_moderate_summary.md
+  - final_tables/resource_moderate_summary.csv
+  - final_tables/robustness_stress_summary.md
+  - manifest/v3_committed_result_manifest.csv
+  - manifest/v3_committed_result_manifest.md
+  - process_summaries/robustness_key_metrics_long.csv
+  - process_summaries/standard_moderate_stage_share.csv
+  - process_summaries/standard_moderate_action_category_share.csv
+  - process_summaries/standard_moderate_mean_stepwise_progress.csv
+  - process_summaries/standard_moderate_mean_cumulative_progress.csv
+  - process_summaries/process_file_inventory.csv
+- raw-only/uncommitted files:
+  - paper_repair_results_fixed_v3/raw_runs/
+  - paper_repair_results_fixed_v3/process/standard_moderate_per_step_eval_trace.csv
+- duplicate diagnosis outcome: pre=6 post=4
+- targeted rerun outcome: 12/12 valid
+- process metadata outcome: preset_name_non_null_rate=1.0000
+- remaining limitations: duplicates remain where deterministic fallback produced identical vectors across methods

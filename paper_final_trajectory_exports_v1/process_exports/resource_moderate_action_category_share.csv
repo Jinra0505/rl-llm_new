@@ -1,0 +1,5 @@
+scenario,method,action_category,mean_usage_share,n_seeds
+resource_moderate,baseline_rl,coordinated,0.0375,3
+resource_moderate,baseline_rl,feeder,0.4777777777777778,3
+resource_moderate,baseline_rl,mes,0.24166666666666667,3
+resource_moderate,baseline_rl,wait,0.24305555555555555,3

@@ -1,0 +1,6 @@
+scenario,method,action_category,mean_usage_share,n_seeds
+standard_severe,baseline_rl,comm,0.3,1
+standard_severe,baseline_rl,coordinated,0.27499999999999997,3
+standard_severe,baseline_rl,feeder,0.07083333333333333,2
+standard_severe,baseline_rl,mes,0.32222222222222224,3
+standard_severe,baseline_rl,wait,0.2555555555555556,3

@@ -247,12 +247,36 @@ def run_outer_pipeline(mode: str, seed: int, reward_mode: str, split_name: str, 
         break
     if latest is None or summary is None or run_status is None:
         raise RuntimeError("No completed outer-loop run with round summary found for benchmark eval.")
-    metrics = dict(summary.get("best_candidate", {}).get("metrics", {}))
+    best_candidate = summary.get("best_candidate", {}) if isinstance(summary.get("best_candidate"), dict) else {}
+    selection_diag = summary.get("selection_diagnostics", {}) if isinstance(summary.get("selection_diagnostics"), dict) else {}
+    metrics = dict(best_candidate.get("metrics", {}))
     metrics["completed"] = bool(run_status.get("completed", False))
     metrics["failed"] = bool(run_status.get("failed", True))
     metrics["artifact_run_dir"] = str(latest)
     metrics["eval_budget_mode"] = eval_budget_mode
     metrics["eval_max_steps"] = int(eval_max_steps)
+    # Provenance / explainability fields for downstream diagnostics and paper tables.
+    metrics["candidate_source"] = str(selection_diag.get("winner_source", summary.get("winner_source", "")))
+    metrics["selected_candidate_id"] = str(best_candidate.get("candidate_id", summary.get("best_candidate_id", "")))
+    metrics["fallback_used"] = bool(selection_diag.get("fallback_used", summary.get("fallback_used", False)))
+    metrics["fallback_reason"] = str(selection_diag.get("fallback_reason", ""))
+    validation_blob = best_candidate.get("validation", {}) if isinstance(best_candidate.get("validation"), dict) else {}
+    metrics["validation_status"] = "valid" if bool(validation_blob.get("valid", True)) else "invalid"
+    reject_blob = selection_diag.get("rejection_reasons", {})
+    if isinstance(reject_blob, dict):
+        metrics["rejection_reason"] = "|".join(sorted({reason for reasons in reject_blob.values() for reason in (reasons or [])}))
+    else:
+        metrics["rejection_reason"] = ""
+    metrics["score_components"] = {
+        "selection_score": float(metrics.get("selection_score", 0.0)),
+        "stability_adjusted_selection_score": float(
+            metrics.get("stability_adjusted_selection_score", metrics.get("selection_score", 0.0))
+        ),
+        "recovery_adjusted_selection_score": float(
+            metrics.get("recovery_adjusted_selection_score", metrics.get("selection_score", 0.0))
+        ),
+        "round_delta_summary": selection_diag.get("round_delta_summary", {}),
+    }
     out_path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
     return metrics
 

@@ -1,0 +1,30 @@
+# v4 manifest
+
+- package_root: paper_repair_results_final_v4
+- raw_provenance_folder: paper_repair_results_final_v4/raw_runs (not committed as compact table asset)
+- included files:
+  - final_tables_v4/figure_ready_metrics.csv
+  - final_tables_v4/figure_ready_metrics.md
+  - final_tables_v4/resource_moderate_per_seed.csv
+  - final_tables_v4/resource_moderate_summary.csv
+  - final_tables_v4/resource_moderate_summary.md
+  - final_tables_v4/robustness_stress_summary.csv
+  - final_tables_v4/robustness_stress_summary.md
+  - final_tables_v4/standard_moderate_per_seed.csv
+  - final_tables_v4/standard_moderate_summary.csv
+  - final_tables_v4/standard_moderate_summary.md
+  - final_tables_v4/standard_severe_per_seed.csv
+  - final_tables_v4/standard_severe_summary.csv
+  - final_tables_v4/standard_severe_summary.md
+  - process_summaries_v4/process_file_inventory.csv
+  - process_summaries_v4/robustness_key_metrics_long.csv
+  - process_summaries_v4/standard_moderate_action_category_share.csv
+  - process_summaries_v4/standard_moderate_mean_cumulative_progress.csv
+  - process_summaries_v4/standard_moderate_mean_stepwise_progress.csv
+  - process_summaries_v4/standard_moderate_stage_share.csv
+  - diagnostics_v4/resource_moderate_selection_diagnosis.csv
+  - diagnostics_v4/v4_concise_diagnostic_report.md
+  - diagnostics_v4/v4_duplicate_vector_diagnosis.csv
+  - diagnostics_v4/v4_paper_recommendation.md
+  - diagnostics_v4/v4_verification_report.json
+  - diagnostics_v4/v4_verification_report.md

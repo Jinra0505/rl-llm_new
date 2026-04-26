@@ -1045,11 +1045,23 @@ def run_training(
             cumulative_progress += progress_delta
             trace_row = {
                 "episode_id": int(ep),
+                "preset_name": str(info.get("preset_name", "")),
+                "preset_group": str(info.get("preset_group", "")),
+                "split_name": str(info.get("split_name", "")),
                 "step": int(step_idx),
                 "action": int(a),
                 "stage": str(info.get("stage", "unknown")),
                 "progress_delta": progress_delta,
                 "cumulative_progress": float(cumulative_progress),
+                "cumulative_progress_from_delta": float(cumulative_progress),
+                "recovery_snapshot_progress": float(
+                    min(
+                        info.get("power_recovery_ratio", 0.0),
+                        info.get("communication_recovery_ratio", 0.0),
+                        info.get("road_recovery_ratio", 0.0),
+                        info.get("critical_load_recovery_ratio", 0.0),
+                    )
+                ),
                 "critical_load_recovery_ratio": float(info.get("critical_load_recovery_ratio", 0.0)),
                 "min_recovery_ratio": float(
                     min(
