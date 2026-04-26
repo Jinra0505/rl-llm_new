@@ -1,0 +1,4 @@
+scenario,method,stage,mean_usage_share,n_seeds
+resource_moderate,baseline_rl,middle,1.0,3
+resource_moderate,full_outer_loop,middle,1.0,3
+resource_moderate,single_shot_llm,middle,1.0,3

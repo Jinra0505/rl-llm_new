@@ -1,0 +1,7 @@
+scenario,method,stage,mean_usage_share,n_seeds
+standard_severe,baseline_rl,late,0.125,3
+standard_severe,baseline_rl,middle,0.875,3
+standard_severe,full_outer_loop,late,0.13369549471244388,3
+standard_severe,full_outer_loop,middle,0.8663045052875562,3
+standard_severe,single_shot_llm,late,0.13369549471244388,3
+standard_severe,single_shot_llm,middle,0.8663045052875562,3
