@@ -1,0 +1,29 @@
+# Prevent oversized/binary experiment artifacts from entering PRs
+*.zip
+*.png
+*.jpg
+*.jpeg
+*.svg
+*.pdf
+*.docx
+*.pptx
+*.xlsx
+*.pt
+*.pth
+*.pkl
+*.pickle
+*.joblib
+*.bin
+*.parquet
+*.feather
+*.h5
+*.hdf5
+*.sqlite
+*.db
+*.arrow
+
+# Keep raw/temporary V8 rerun artifacts out of git
+paper_final_v8_integrated/_tmp_raw_reruns/
+paper_final_v8_integrated/raw_trajectories/
+paper_final_v8_integrated/diagnostics/rerun_status.csv
+paper_final_v8_integrated/diagnostics/step_level_trace_sample.csv
