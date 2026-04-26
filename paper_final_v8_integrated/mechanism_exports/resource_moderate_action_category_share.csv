@@ -1,0 +1,13 @@
+scenario,method,action_category,mean_usage_share,n_seeds
+resource_moderate,baseline_rl,coordinated,0.0375,3
+resource_moderate,baseline_rl,feeder,0.4777777777777778,3
+resource_moderate,baseline_rl,mes,0.24166666666666667,3
+resource_moderate,baseline_rl,wait,0.24305555555555555,3
+resource_moderate,full_outer_loop,coordinated,0.375,3
+resource_moderate,full_outer_loop,mes,0.275,3
+resource_moderate,full_outer_loop,wait,0.3499999999999999,3
+resource_moderate,single_shot_llm,coordinated,0.3416666666666666,3
+resource_moderate,single_shot_llm,feeder,0.004166666666666667,1
+resource_moderate,single_shot_llm,mes,0.26944444444444443,3
+resource_moderate,single_shot_llm,power,0.1375,1
+resource_moderate,single_shot_llm,wait,0.3416666666666666,3

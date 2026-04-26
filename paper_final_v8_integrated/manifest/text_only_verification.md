@@ -1,0 +1,46 @@
+# text_only_verification
+
+- number of staged files: 36
+- binary files were detected: no
+- list of excluded binary files: none
+- confirmation git diff --cached --numstat has no binary markers: yes
+- confirmation no zip/image/docx/pdf/checkpoint files are staged: yes
+- mime check method: python mimetype + UTF-8 decode (system `file --mime` unavailable in this environment).
+
+## Per-file verification
+- .gitattributes: mime_guess=text/plain, utf8_decodable=yes
+- .gitignore: mime_guess=text/plain, utf8_decodable=yes
+- final_v8_integrated_rerun.py: mime_guess=text/x-python, utf8_decodable=yes
+- paper_final_v8_integrated/README.md: mime_guess=text/markdown, utf8_decodable=yes
+- paper_final_v8_integrated/candidate_diagnostics/candidate_rejection_reason_summary.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/candidate_diagnostics/candidate_selection_summary.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/candidate_diagnostics/candidate_source_share.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/diagnostics/final_v8_consistency_check.md: mime_guess=text/markdown, utf8_decodable=yes
+- paper_final_v8_integrated/diagnostics/v6_comparison_summary.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/diagnostics/v6_comparison_summary.md: mime_guess=text/markdown, utf8_decodable=yes
+- paper_final_v8_integrated/final_tables/figure_ready_metrics.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/final_tables/resource_moderate_summary.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/final_tables/robustness_stress_summary.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/final_tables/standard_moderate_summary.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/final_tables/standard_severe_summary.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/manifest/data_integrity_check.md: mime_guess=text/markdown, utf8_decodable=yes
+- paper_final_v8_integrated/manifest/export_manifest.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/manifest/file_checksums.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/manifest/process_file_inventory.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/manifest/text_only_verification.md: mime_guess=text/markdown, utf8_decodable=yes
+- paper_final_v8_integrated/mechanism_exports/resource_moderate_action_category_share.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/mechanism_exports/resource_moderate_stage_share.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/mechanism_exports/standard_moderate_action_category_share.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/mechanism_exports/standard_moderate_stage_share.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/mechanism_exports/standard_severe_action_category_share.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/mechanism_exports/standard_severe_stage_share.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/per_seed/resource_moderate_per_seed.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/per_seed/standard_moderate_per_seed.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/per_seed/standard_severe_per_seed.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/plotting_readiness_summary.md: mime_guess=text/markdown, utf8_decodable=yes
+- paper_final_v8_integrated/process_exports/resource_moderate_mean_cumulative_progress.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/process_exports/resource_moderate_mean_stepwise_progress.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/process_exports/standard_moderate_mean_cumulative_progress.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/process_exports/standard_moderate_mean_stepwise_progress.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/process_exports/standard_severe_mean_cumulative_progress.csv: mime_guess=text/csv, utf8_decodable=yes
+- paper_final_v8_integrated/process_exports/standard_severe_mean_stepwise_progress.csv: mime_guess=text/csv, utf8_decodable=yes

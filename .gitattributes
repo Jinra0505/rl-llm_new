@@ -1,0 +1,6 @@
+paper_final_v8_integrated/**/*.csv -diff linguist-generated=true
+paper_final_v8_integrated/**/*.json -diff linguist-generated=true
+paper_final_v8_integrated/**/*.md text
+# keep CSV/JSON textual for verification and safe review stats
+paper_final_v8_integrated/**/*.csv text diff
+paper_final_v8_integrated/**/*.json text diff
