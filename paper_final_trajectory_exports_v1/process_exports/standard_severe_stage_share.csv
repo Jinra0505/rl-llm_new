@@ -1,0 +1,3 @@
+scenario,method,stage,mean_usage_share,n_seeds
+standard_severe,baseline_rl,late,0.125,3
+standard_severe,baseline_rl,middle,0.875,3

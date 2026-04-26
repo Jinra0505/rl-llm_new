@@ -1,0 +1,2 @@
+scenario,method,stage,mean_usage_share,n_seeds
+resource_moderate,baseline_rl,middle,1.0,3

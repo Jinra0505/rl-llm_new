@@ -1,0 +1,13 @@
+file_name,exists,row_count
+resource_moderate_mean_cumulative_progress.csv,True,40
+standard_severe_mean_cumulative_progress.csv,True,40
+resource_moderate_mean_stepwise_progress.csv,True,40
+standard_severe_mean_stepwise_progress.csv,True,40
+resource_moderate_layer_recovery_by_step.csv,True,160
+standard_severe_layer_recovery_by_step.csv,True,160
+resource_moderate_safety_by_step.csv,True,40
+standard_severe_safety_by_step.csv,True,40
+resource_moderate_action_category_share.csv,True,4
+standard_severe_action_category_share.csv,True,5
+resource_moderate_stage_share.csv,True,1
+standard_severe_stage_share.csv,True,2
