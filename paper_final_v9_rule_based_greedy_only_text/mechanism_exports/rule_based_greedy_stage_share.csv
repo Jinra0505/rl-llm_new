@@ -1,0 +1,7 @@
+scenario,method,stage,mean_usage_share,std_usage_share,n_seeds
+resource_moderate,rule_based_greedy,late,0.0,0.0,3
+resource_moderate,rule_based_greedy,middle,1.0,0.0,3
+standard_moderate,rule_based_greedy,late,0.0813953488372093,0.020692012116339746,3
+standard_moderate,rule_based_greedy,middle,0.9186046511627907,0.020692012116339756,3
+standard_severe,rule_based_greedy,late,0.11162201742991022,0.02101664211895838,3
+standard_severe,rule_based_greedy,middle,0.8883779825700898,0.02101664211895837,3
