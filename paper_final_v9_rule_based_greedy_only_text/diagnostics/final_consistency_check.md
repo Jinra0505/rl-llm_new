@@ -10,6 +10,13 @@
   - standard_severe: 3
 - every scenario has n_valid = 3: yes
 - any empty action_category exists: no
-- any NaN or sentinel values in core metrics: no
-- outputs usable for merging with existing V8 results: yes
+- action-category shares sum to 1 for every scenario: yes
+- max action-category share sum deviation: 0.000000000000
+- any NaN or sentinel values appear in core metrics: no
+- outputs are usable for merging with existing V8 results: yes
 - final verdict: usable_for_merge_with_v8 = yes
+
+## action-category share sums
+- resource_moderate: share_sum=1.000000000000, deviation=0.000000000000
+- standard_moderate: share_sum=1.000000000000, deviation=0.000000000000
+- standard_severe: share_sum=1.000000000000, deviation=0.000000000000

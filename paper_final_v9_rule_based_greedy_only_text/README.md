@@ -29,3 +29,11 @@ Merge note:
 - Append `final_tables/rule_based_greedy_figure_ready_metrics.csv` rows to V8 `figure_ready_metrics.csv`.
 
 No binary files were intentionally generated.
+
+
+Additional merge note:
+- This package contains only the rule_based_greedy baseline. Other methods should be taken from the existing V8 package.
+- Append `per_seed/rule_based_greedy_per_seed.csv` to the V8 per-seed table.
+- Append `final_tables/rule_based_greedy_summary.csv` to the V8 scenario-method summary table.
+- Append `final_tables/rule_based_greedy_figure_ready_metrics.csv` to the V8 `figure_ready_metrics.csv`.
+- Append `mechanism_exports/rule_based_greedy_action_category_share.csv` to the corresponding V8 mechanism/action-category table after checking category definitions.

@@ -36,3 +36,6 @@ rule_based_greedy logic:
 
 Trace action_category integrity:
 - run_rule_based_greedy writes non-empty action_category values in traces.
+
+
+Confirmation: greedy trace rows are consumed with non-empty action_category values (empty legacy values are normalized from action index during aggregation).
