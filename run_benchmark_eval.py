@@ -9,6 +9,8 @@ from typing import Any
 
 import yaml
 
+from mock_recovery_env import ProjectRecoveryEnv
+from train_rl import _valid_action_mask
 from train_rl import run_training
 
 DEFAULT_CFG: dict[str, Any] = {
@@ -281,9 +283,105 @@ def run_outer_pipeline(mode: str, seed: int, reward_mode: str, split_name: str, 
     return metrics
 
 
+def _action_type_proxy_score(action: int, info: dict[str, Any], stage_frac: float) -> float:
+    critical_def = max(0.0, 1.0 - float(info.get("critical_load_recovery_ratio", 0.0)))
+    power_def = max(0.0, 1.0 - float(info.get("power_recovery_ratio", 0.0)))
+    comm_def = max(0.0, 1.0 - float(info.get("communication_recovery_ratio", 0.0)))
+    road_def = max(0.0, 1.0 - float(info.get("road_recovery_ratio", 0.0)))
+    min_def = max(0.0, 1.0 - min(1.0 - power_def, 1.0 - comm_def, 1.0 - road_def, 1.0 - critical_def))
+    weak_layer = str(info.get("weakest_layer", "0"))
+    weak_zone = str(info.get("weakest_zone", "A"))
+    zone_idx = {"A": 0, "B": 1, "C": 2}.get(weak_zone, 0)
+    mes_soc = float(info.get("mes_soc", 1.0))
+    switching = float(info.get("switching_capability", 0.0))
+    backbone_comm = float(info.get("backbone_comm_ratio", 0.0))
+    if action in {0, 1, 2}:
+        return 1.2 * road_def + 0.5 * power_def + (0.3 if action == zone_idx else 0.0)
+    if action in {3, 4, 5}:
+        return 1.25 * power_def + 1.0 * critical_def + (0.25 if weak_layer == "0" else 0.0)
+    if action in {6, 7, 8}:
+        return 1.2 * comm_def + 0.4 * switching + (0.25 if weak_layer == "1" else 0.0)
+    if action in {9, 10, 11}:
+        soc_penalty = 0.8 * max(0.0, 0.2 - mes_soc)
+        return 1.3 * critical_def + 0.8 * power_def - soc_penalty
+    if action == 12:
+        imbalance = float(abs(power_def - comm_def) + abs(comm_def - road_def))
+        return 0.7 * backbone_comm + 0.8 * switching + 0.8 * imbalance
+    if action == 13:
+        mean_def = (critical_def + power_def + comm_def + road_def) / 4.0
+        return 1.2 * min_def + 0.8 * mean_def + 0.35 * stage_frac
+    if action == 14:
+        return -0.08
+    return -0.1
+
+
+def run_rule_based_greedy(seed: int, split_name: str, preset_group: str, preset_name: str, preset_jitter: float, severity: str, out_path: Path, cfg: dict[str, Any], eval_budget_mode: str, eval_max_steps: int) -> dict[str, Any]:
+    env = ProjectRecoveryEnv(max_steps=int(eval_max_steps), seed=seed, severity=severity)
+    eval_episodes = int(cfg.get("training", {}).get("eval_episodes", 6))
+    trace_rows: list[dict[str, Any]] = []
+    per_ep_summary: list[dict[str, Any]] = []
+    finals: list[dict[str, float]] = []
+    tot_steps = tot_invalid = tot_violate = tot_wait = 0
+    action_usage = {str(i): 0 for i in range(int(env.action_space.n))}
+    for ep in range(eval_episodes):
+        obs, info = env.reset(seed=seed + ep, options={"benchmark_mode": "suite", "split_name": split_name, "preset_group": preset_group, "preset_name": preset_name, "preset_index": int(ep), "preset_jitter": float(preset_jitter), "severity": severity})
+        cumulative_progress = 0.0
+        for step in range(int(eval_max_steps)):
+            valid_mask = _valid_action_mask(int(env.action_space.n), info, eval_budget_mode=eval_budget_mode, phase_contract=None)
+            feasible = [a for a in range(int(env.action_space.n)) if bool(valid_mask[a])]
+            if not feasible:
+                feasible = [14] if int(env.action_space.n) > 14 else [0]
+            stage_frac = float(step + 1) / float(max(1, eval_max_steps))
+            scores: dict[int, float] = {}
+            for a in feasible:
+                try:
+                    env_clone = copy.deepcopy(env)
+                    _, _, _, _, ninfo = env_clone.step(int(a))
+                    delta_crit = float(ninfo.get("critical_load_recovery_ratio", 0.0)) - float(info.get("critical_load_recovery_ratio", 0.0))
+                    delta_pow = float(ninfo.get("power_recovery_ratio", 0.0)) - float(info.get("power_recovery_ratio", 0.0))
+                    delta_comm = float(ninfo.get("communication_recovery_ratio", 0.0)) - float(info.get("communication_recovery_ratio", 0.0))
+                    delta_road = float(ninfo.get("road_recovery_ratio", 0.0)) - float(info.get("road_recovery_ratio", 0.0))
+                    min_prev = min(float(info.get("power_recovery_ratio", 0.0)), float(info.get("communication_recovery_ratio", 0.0)), float(info.get("road_recovery_ratio", 0.0)), float(info.get("critical_load_recovery_ratio", 0.0)))
+                    min_next = min(float(ninfo.get("power_recovery_ratio", 0.0)), float(ninfo.get("communication_recovery_ratio", 0.0)), float(ninfo.get("road_recovery_ratio", 0.0)), float(ninfo.get("critical_load_recovery_ratio", 0.0)))
+                    delta_min = min_next - min_prev
+                    delta_prog = float(ninfo.get("progress_delta", 0.0))
+                    mat_use = max(0.0, float(info.get("material_stock", 0.0)) - float(ninfo.get("material_stock", 0.0)))
+                    soc_use = max(0.0, float(info.get("mes_soc", 0.0)) - float(ninfo.get("mes_soc", 0.0)))
+                    scores[a] = 3.0 * delta_crit + 1.8 * delta_min + 1.2 * delta_pow + 1.0 * delta_comm + 0.8 * delta_road + 2.0 * delta_prog - 0.6 * mat_use - 0.4 * soc_use
+                except Exception:
+                    scores[a] = _action_type_proxy_score(a, info, stage_frac)
+            non_wait_scores = [v for k, v in scores.items() if k != 14]
+            best_non_wait = max(non_wait_scores) if non_wait_scores else -1e9
+            if 14 in feasible and (best_non_wait < 0.005):
+                act = 14
+            else:
+                act = max(scores.items(), key=lambda kv: kv[1])[0]
+            nobs, _, terminated, truncated, ninfo = env.step(int(act))
+            action_usage[str(int(act))] += 1
+            tot_steps += 1
+            tot_invalid += int(bool(ninfo.get("invalid_action", False)))
+            tot_violate += int(bool(ninfo.get("constraint_violation", False)))
+            tot_wait += int(int(act) == 14)
+            cumulative_progress += float(ninfo.get("progress_delta", 0.0))
+            trace_rows.append({"episode_id": ep, "step": step, "action": int(act), "action_category": "", "stage": str(ninfo.get("stage", "unknown")), "progress_delta": float(ninfo.get("progress_delta", 0.0)), "cumulative_progress": float(cumulative_progress), "constraint_violation": bool(ninfo.get("constraint_violation", False)), "invalid_action": bool(ninfo.get("invalid_action", False)), "wait_hold_usage": bool(int(act) == 14), "critical_load_recovery_ratio": float(ninfo.get("critical_load_recovery_ratio", 0.0)), "communication_recovery_ratio": float(ninfo.get("communication_recovery_ratio", 0.0)), "power_recovery_ratio": float(ninfo.get("power_recovery_ratio", 0.0)), "road_recovery_ratio": float(ninfo.get("road_recovery_ratio", 0.0))})
+            obs, info = nobs, ninfo
+            if terminated or truncated:
+                break
+        per_ep_summary.append({"episode_id": ep, "final_cumulative_progress": float(cumulative_progress)})
+        finals.append({k: float(info.get(k, 0.0)) for k in ["critical_load_recovery_ratio", "communication_recovery_ratio", "power_recovery_ratio", "road_recovery_ratio"]})
+    crit = sum(x["critical_load_recovery_ratio"] for x in finals) / max(1, len(finals))
+    comm = sum(x["communication_recovery_ratio"] for x in finals) / max(1, len(finals))
+    power = sum(x["power_recovery_ratio"] for x in finals) / max(1, len(finals))
+    road = sum(x["road_recovery_ratio"] for x in finals) / max(1, len(finals))
+    min_rec = min(crit, comm, power, road)
+    result = {"selection_score": float((crit + comm + power + road + min_rec) / 5.0 - 0.2 * (tot_invalid / max(1, tot_steps)) - 0.2 * (tot_violate / max(1, tot_steps))), "critical_load_recovery_ratio": crit, "min_recovery_ratio": min_rec, "power_recovery_ratio": power, "communication_recovery_ratio": comm, "road_recovery_ratio": road, "constraint_violation_rate_eval": float(tot_violate) / float(max(1, tot_steps)), "invalid_action_rate_eval": float(tot_invalid) / float(max(1, tot_steps)), "wait_hold_usage_eval": float(tot_wait) / float(max(1, tot_steps)), "mean_progress_delta_eval": float(sum(float(t.get("progress_delta", 0.0)) for t in trace_rows)) / float(max(1, tot_steps)), "cumulative_progress": float(sum(float(ep.get("final_cumulative_progress", 0.0)) for ep in per_ep_summary)) / float(max(1, len(per_ep_summary))), "eval_episode_traces": trace_rows, "per_episode_eval_summary": per_ep_summary, "action_usage": action_usage, "eval_budget_mode": eval_budget_mode, "eval_max_steps": int(eval_max_steps), "train_max_steps": int(eval_max_steps), "candidate_source": "rule_based_greedy", "selected_candidate_id": "rule_based_greedy", "fallback_used": False, "fallback_reason": "", "validation_status": "valid", "rejection_reason": "", "completed": True, "failed": False}
+    out_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    return result
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run aligned benchmark evaluation for baseline/single/full pipelines.")
-    parser.add_argument("--mode", choices=["baseline_rl", "single_shot_llm", "full_outer_loop", "ablation_fixed_global"], required=True)
+    parser.add_argument("--mode", choices=["baseline_rl", "rule_based_greedy", "greedy_feasible_restoration_policy", "single_shot_llm", "full_outer_loop", "ablation_fixed_global"], required=True)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--reward-mode", choices=["clean", "engineered"], default="engineered")
     parser.add_argument("--split-name", default="benchmark_eval_presets")
@@ -316,6 +414,8 @@ def main() -> None:
             eval_budget_mode,
             eval_max_steps,
         )
+    elif args.mode in {"rule_based_greedy", "greedy_feasible_restoration_policy"}:
+        metrics = run_rule_based_greedy(args.seed, args.split_name, args.preset_group, args.preset_name, args.preset_jitter, args.severity, out_path, cfg, eval_budget_mode, eval_max_steps)
     else:
         metrics = run_outer_pipeline(
             args.mode,

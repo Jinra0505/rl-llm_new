@@ -10,7 +10,7 @@ import pandas as pd
 
 SCENARIOS = ["standard_moderate", "resource_moderate", "standard_severe"]
 SEEDS = [42, 43, 44]
-METHODS = ["baseline_rl", "single_shot_llm", "full_outer_loop"]
+METHODS = ["baseline_rl", "rule_based_greedy", "single_shot_llm", "full_outer_loop"]
 OPTIONAL_METHODS_INCLUDED: list[str] = []
 
 SCENARIO_CFG = {
@@ -19,7 +19,7 @@ SCENARIO_CFG = {
     "standard_severe": {"split_name": "benchmark_eval_presets", "severity": "severe"},
 }
 
-OUT = Path("paper_final_v8_integrated")
+OUT = Path("paper_final_v9_integrated_with_greedy")
 FINAL = OUT / "final_tables"
 PER_SEED = OUT / "per_seed"
 PROCESS = OUT / "process_exports"
@@ -140,6 +140,7 @@ metric_cols = [
     "communication_recovery_ratio",
     "power_recovery_ratio",
     "road_recovery_ratio",
+    "cumulative_progress",
     "constraint_violation_rate_eval",
     "invalid_action_rate_eval",
     "wait_hold_usage_eval",
@@ -222,6 +223,14 @@ for rec in run_records:
             "communication_recovery_ratio": float(data.get("communication_recovery_ratio", math.nan)),
             "power_recovery_ratio": float(data.get("power_recovery_ratio", math.nan)),
             "road_recovery_ratio": float(data.get("road_recovery_ratio", math.nan)),
+            "cumulative_progress": float(
+                data.get(
+                    "cumulative_progress",
+                    (sum(float(x.get("final_cumulative_progress", 0.0)) for x in data.get("per_episode_eval_summary", [])) / max(1, len(data.get("per_episode_eval_summary", []))))
+                    if isinstance(data.get("per_episode_eval_summary", []), list)
+                    else math.nan,
+                )
+            ),
             "constraint_violation_rate_eval": float(data.get("constraint_violation_rate_eval", math.nan)),
             "invalid_action_rate_eval": float(data.get("invalid_action_rate_eval", data.get("invalid_action_rate", math.nan))),
             "wait_hold_usage_eval": float(data.get("wait_hold_usage_eval", data.get("wait_hold_usage", math.nan))),
